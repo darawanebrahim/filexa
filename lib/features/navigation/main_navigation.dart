@@ -20,59 +20,44 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
   static const List<Widget> _pages = [
     HomePage(),
+    FilesPage(),
     BrowserPage(),
     DownloadsPage(),
-    FilesPage(),
     SettingsPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(index: _selectedIndex, children: _pages),
-      bottomNavigationBar: MediaQuery(
-        // Keep navigation labels on one line even when the device uses a large
-        // accessibility font size. Content elsewhere still respects the user's
-        // preferred text scale.
-        data: MediaQuery.of(context).copyWith(
-          textScaler: const TextScaler.linear(1),
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: .65)),
+          ),
         ),
-        child: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (index) {
-            if (index == 3) ref.invalidate(filesProvider);
-            setState(() => _selectedIndex = index);
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
+        child: SafeArea(
+          top: false,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
+            child: NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                if (index == 1) ref.invalidate(filesProvider);
+                setState(() => _selectedIndex = index);
+              },
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
+                NavigationDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder_rounded), label: 'Files'),
+                NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public_rounded), label: 'Browser'),
+                NavigationDestination(icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download_rounded), label: 'Downloads'),
+                NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: 'Settings'),
+              ],
             ),
-            NavigationDestination(
-              icon: Icon(Icons.public_outlined),
-              selectedIcon: Icon(Icons.public_rounded),
-              label: 'Browser',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.download_outlined),
-              selectedIcon: Icon(Icons.download_rounded),
-              label: 'Downloads',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.folder_outlined),
-              selectedIcon: Icon(Icons.folder_rounded),
-              label: 'Files',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings_rounded),
-              label: 'Settings',
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
-

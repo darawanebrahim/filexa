@@ -1,3 +1,5 @@
+enum DownloadPriority { high, normal, low }
+
 enum DownloadStatus {
   queued,
   downloading,
@@ -22,6 +24,7 @@ class DownloadTask {
     this.savedPath,
     this.errorMessage,
     this.headers = const <String, String>{},
+    this.priority = DownloadPriority.normal,
   });
 
   final String id;
@@ -38,6 +41,7 @@ class DownloadTask {
   String? savedPath;
   String? errorMessage;
   final Map<String, String> headers;
+  DownloadPriority priority;
 
   bool get isActive =>
       status == DownloadStatus.queued || status == DownloadStatus.downloading;

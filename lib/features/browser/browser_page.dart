@@ -112,7 +112,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(_mobileUserAgent)
-      ..setBackgroundColor(const Color(0xFFF7F6FB))
+      ..setBackgroundColor(Colors.transparent)
       ..addJavaScriptChannel(
         _downloadChannel,
         onMessageReceived: (message) {
@@ -129,8 +129,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
       controller: controller,
       url: url,
     );
-    controller
-      ..setNavigationDelegate(
+    controller.setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) => _handleNavigation(tab, request),
           onProgress: (value) {
@@ -523,30 +522,119 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
   }
 
   Future<bool> _askDownload(String url) async {
-    final result = await showDialog<bool>(
+    final suggestedName = _fileName(url);
+    final nameController = TextEditingController(text: suggestedName);
+    final uri = Uri.tryParse(url);
+    final host = uri?.host.replaceFirst('www.', '') ?? 'Direct link';
+    final extension = suggestedName.contains('.')
+        ? suggestedName.split('.').last.toUpperCase()
+        : 'FILE';
+
+    final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.download_for_offline_rounded),
-        title: const Text('Download detected'),
-        content: Text(url, maxLines: 4, overflow: TextOverflow.ellipsis),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Open page'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.download_rounded),
-            label: const Text('Download'),
-          ),
-        ],
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          4,
+          20,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  child: Icon(Icons.download_for_offline_rounded),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Download file',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      ),
+                      Text('Review the file before downloading'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: nameController,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'File name',
+                prefixIcon: Icon(Icons.edit_document),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(sheetContext).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Expanded(child: _DownloadMeta(label: 'Type', value: extension)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _DownloadMeta(label: 'Source', value: host)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              url,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(sheetContext).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      final name = nameController.text.trim();
+                      Navigator.pop(
+                        sheetContext,
+                        name.isEmpty ? suggestedName : name,
+                      );
+                    },
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Download'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
-    if (result == true) await _startDownload(url);
-    return result ?? false;
+    nameController.dispose();
+    if (result != null) {
+      await _startDownload(url, fileName: result);
+      return true;
+    }
+    return false;
   }
 
-  Future<void> _startDownload(String url) async {
+  Future<void> _startDownload(String url, {String? fileName}) async {
     if (!_isWebUrl(url)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -558,7 +646,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
     }
     final task = await DownloadManager.instance.startDownload(
       url: url,
-      fileName: _fileName(url),
+      fileName: fileName ?? _fileName(url),
       folder: 'Filexa app storage',
       headers: <String, String>{
         'User-Agent': _tab.desktopMode
@@ -798,79 +886,119 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bookmarked = _tab.url != _homeUrl && _bookmarks.contains(_tab.url);
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: _tab.url == _homeUrl
-          ? null
-          : AppBar(
-        titleSpacing: 14,
-        title: const Text(
-          'Browser',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () => _addTab(_homeUrl),
-            tooltip: 'New tab',
-            icon: const Icon(Icons.add_box_outlined),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Badge(
-              label: Text('${_tabs.length}'),
-              child: IconButton.filledTonal(
-                onPressed: _showTabs,
-                tooltip: 'Tabs',
-                icon: const Icon(Icons.tab_rounded),
-              ),
-            ),
-          ),
-        ],
-      ),
       body: Column(
         children: [
           if (_tab.url != _homeUrl)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-              child: TextField(
-              controller: _addressController,
-              focusNode: _addressFocus,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.go,
-              onSubmitted: (_) => _openAddress(),
-              decoration: InputDecoration(
-                hintText: 'Search or enter address',
-                prefixIcon: Icon(
-                  _tab.url.startsWith('https://')
-                      ? Icons.lock_outline_rounded
-                      : Icons.language_rounded,
-                  size: 20,
+            SafeArea(
+              bottom: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                decoration: BoxDecoration(
+                  color: theme.scaffoldBackgroundColor,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: theme.dividerColor.withValues(alpha: .16),
+                    ),
+                  ),
                 ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    if (_tab.loading)
-                      IconButton(
-                        onPressed: () async {
-                          await _tab.controller.runJavaScript('window.stop();');
-                          if (!mounted) return;
-                          setState(() => _tab.loading = false);
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      )
-                    else
-                      IconButton(
-                        onPressed: _tab.controller.reload,
-                        icon: const Icon(Icons.refresh_rounded),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: TextField(
+                          controller: _addressController,
+                          focusNode: _addressFocus,
+                          keyboardType: TextInputType.url,
+                          textInputAction: TextInputAction.go,
+                          onSubmitted: (_) => _openAddress(),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            hintText: 'Search or enter address',
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: 42,
+                              minHeight: 42,
+                            ),
+                            prefixIcon: Icon(
+                              _tab.url.startsWith('https://')
+                                  ? Icons.lock_outline_rounded
+                                  : Icons.language_rounded,
+                              size: 19,
+                            ),
+                            suffixIconConstraints: const BoxConstraints(
+                              minWidth: 78,
+                              minHeight: 42,
+                            ),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 38,
+                                  child: IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    onPressed: _tab.loading
+                                        ? () async {
+                                            await _tab.controller.runJavaScript(
+                                              'window.stop();',
+                                            );
+                                            if (!mounted) return;
+                                            setState(() => _tab.loading = false);
+                                          }
+                                        : _tab.controller.reload,
+                                    icon: Icon(
+                                      _tab.loading
+                                          ? Icons.close_rounded
+                                          : Icons.refresh_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 38,
+                                  child: IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    onPressed: _openAddress,
+                                    icon: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 21,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
+                    ),
+                    const SizedBox(width: 4),
                     IconButton(
-                      onPressed: _openAddress,
-                      icon: const Icon(Icons.arrow_forward_rounded),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'New tab',
+                      onPressed: () => _addTab(_homeUrl),
+                      icon: const Icon(Icons.add_box_outlined),
+                    ),
+                    Badge(
+                      label: Text('${_tabs.length}'),
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Tabs',
+                        onPressed: _showTabs,
+                        icon: const Icon(Icons.tab_rounded),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
           if (_tab.loading)
             LinearProgressIndicator(
               value: _tab.progress == 0 ? null : _tab.progress / 100,
@@ -907,135 +1035,200 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).dividerColor.withValues(alpha: .2),
-              ),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              IconButton(
-                onPressed: _tab.canGoBack ? _tab.controller.goBack : null,
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              IconButton(
-                onPressed: _tab.canGoForward ? _tab.controller.goForward : null,
-                icon: const Icon(Icons.arrow_forward_rounded),
-              ),
-              IconButton(
-                onPressed: _goHome,
-                icon: const Icon(Icons.home_outlined),
-              ),
-              IconButton(
-                onPressed: _tab.url == _homeUrl
-                    ? null
-                    : () {
+      bottomNavigationBar: _tab.url == _homeUrl
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: theme.cardTheme.color,
+                  border: Border(
+                    top: BorderSide(
+                      color: theme.dividerColor.withValues(alpha: .2),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Back',
+                      onPressed: _tab.canGoBack ? _tab.controller.goBack : null,
+                      icon: const Icon(Icons.arrow_back_rounded, size: 22),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Forward',
+                      onPressed:
+                          _tab.canGoForward ? _tab.controller.goForward : null,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 22),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Browser home',
+                      onPressed: _goHome,
+                      icon: const Icon(Icons.home_outlined, size: 22),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: bookmarked ? 'Remove bookmark' : 'Bookmark',
+                      onPressed: () {
                         setState(() {
                           bookmarked
                               ? _bookmarks.remove(_tab.url)
                               : _bookmarks.add(_tab.url);
                         });
                       },
-                icon: Icon(
-                  bookmarked
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
+                      icon: Icon(
+                        bookmarked
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        size: 22,
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.more_vert_rounded, size: 22),
+                      onSelected: (value) async {
+                        if (value == 'new_tab') _addTab(_homeUrl);
+                        if (value == 'close_tab') _closeTab(_currentIndex);
+                        if (value == 'restore_tab') _reopenClosedTab();
+                        if (value == 'download') await _askDownload(_tab.url);
+                        if (value == 'copy') {
+                          await Clipboard.setData(ClipboardData(text: _tab.url));
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Link copied')),
+                          );
+                        }
+                        if (value == 'history') {
+                          await _showSaved(
+                            'History',
+                            List.of(_history),
+                            history: true,
+                          );
+                        }
+                        if (value == 'bookmarks') {
+                          await _showSaved('Bookmarks', _bookmarks.toList());
+                        }
+                        if (value == 'share') await Share.share(_tab.url);
+                        if (value == 'desktop') await _toggleDesktopMode();
+                        if (value == 'find') await _findInPage();
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'new_tab',
+                          child: ListTile(
+                            leading: Icon(Icons.add_box_outlined),
+                            title: Text('New tab'),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'close_tab',
+                          child: ListTile(
+                            leading: Icon(Icons.close_rounded),
+                            title: Text('Close tab'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'restore_tab',
+                          enabled: _closedTabs.isNotEmpty,
+                          child: const ListTile(
+                            leading: Icon(Icons.restore_rounded),
+                            title: Text('Reopen closed tab'),
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'download',
+                          child: ListTile(
+                            leading: Icon(Icons.download_rounded),
+                            title: Text('Download link'),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'copy',
+                          child: ListTile(
+                            leading: Icon(Icons.copy_rounded),
+                            title: Text('Copy link'),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'bookmarks',
+                          child: ListTile(
+                            leading: Icon(Icons.bookmarks_outlined),
+                            title: Text('Bookmarks'),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'history',
+                          child: ListTile(
+                            leading: Icon(Icons.history_rounded),
+                            title: Text('History'),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'find',
+                          child: ListTile(
+                            leading: Icon(Icons.manage_search_rounded),
+                            title: Text('Find in page'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'desktop',
+                          child: ListTile(
+                            leading: Icon(
+                              _tab.desktopMode
+                                  ? Icons.phone_android_rounded
+                                  : Icons.desktop_windows_rounded,
+                            ),
+                            title: Text(
+                              _tab.desktopMode
+                                  ? 'Mobile mode'
+                                  : 'Desktop mode',
+                            ),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'share',
+                          child: ListTile(
+                            leading: Icon(Icons.share_rounded),
+                            title: Text('Share'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded),
-                onSelected: (value) async {
-                  if (value == 'download') await _askDownload(_tab.url);
-                  if (value == 'copy') {
-                    await Clipboard.setData(ClipboardData(text: _tab.url));
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Link copied')),
-                    );
-                  }
-                  if (value == 'history') {
-                    await _showSaved(
-                      'History',
-                      List.of(_history),
-                      history: true,
-                    );
-                  }
-                  if (value == 'bookmarks') {
-                    await _showSaved('Bookmarks', _bookmarks.toList());
-                  }
-                  if (value == 'share') await Share.share(_tab.url);
-                  if (value == 'desktop') await _toggleDesktopMode();
-                  if (value == 'find') await _findInPage();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    value: 'download',
-                    child: ListTile(
-                      leading: Icon(Icons.download_rounded),
-                      title: Text('Download link'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'copy',
-                    child: ListTile(
-                      leading: Icon(Icons.copy_rounded),
-                      title: Text('Copy link'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'bookmarks',
-                    child: ListTile(
-                      leading: Icon(Icons.bookmarks_outlined),
-                      title: Text('Bookmarks'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'history',
-                    child: ListTile(
-                      leading: Icon(Icons.history_rounded),
-                      title: Text('History'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'find',
-                    child: ListTile(
-                      leading: Icon(Icons.manage_search_rounded),
-                      title: Text('Find in page'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'desktop',
-                    child: ListTile(
-                      leading: Icon(
-                        _tab.desktopMode
-                            ? Icons.phone_android_rounded
-                            : Icons.desktop_windows_rounded,
-                      ),
-                      title: Text(
-                        _tab.desktopMode ? 'Mobile mode' : 'Desktop mode',
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'share',
-                    child: ListTile(
-                      leading: Icon(Icons.share_rounded),
-                      title: Text('Share'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+    );
+  }
+
+}
+
+class _DownloadMeta extends StatelessWidget {
+  const _DownloadMeta({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
-      ),
+      ],
     );
   }
 }
@@ -1269,298 +1462,244 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
 
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: dark
-              ? const [Color(0xFF17121F), Color(0xFF0F0D14)]
-              : const [Color(0xFFF8F4FF), Color(0xFFF2ECFF)],
+              ? const [Color(0xFF0B0F1A), Color(0xFF111625)]
+              : const [Color(0xFFF9F7FF), Color(0xFFF1ECFA)],
         ),
       ),
       child: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: [
-            Row(
-              children: [
-                _RoundAction(
-                  icon: Icons.add_rounded,
-                  tooltip: 'New tab',
-                  onTap: widget.onNewTab,
-                ),
-                const Spacer(),
-                InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: widget.onShowTabs,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withValues(alpha: .88),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: .55),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6842E8), Color(0xFF9B5CFF)],
+                        ),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: const Icon(Icons.bolt_rounded, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Browser',
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            'Private, fast and connected',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Text(
-                      '${widget.tabCount}',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    IconButton.filledTonal(
+                      tooltip: 'New tab',
+                      onPressed: widget.onNewTab,
+                      icon: const Icon(Icons.add_rounded),
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF8257FF), Color(0xFFB86BFF)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x3D7C4DFF),
-                      blurRadius: 30,
-                      offset: Offset(0, 14),
+                    const SizedBox(width: 6),
+                    Badge(
+                      label: Text('${widget.tabCount}'),
+                      child: IconButton.filledTonal(
+                        tooltip: 'Tabs',
+                        onPressed: widget.onShowTabs,
+                        icon: const Icon(Icons.tab_rounded),
+                      ),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.bolt_rounded,
-                  color: Colors.white,
-                  size: 38,
-                ),
               ),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              'Filexa Browser',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Fast. Simple. Yours.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 26),
-            Container(
-              padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-              decoration: BoxDecoration(
-                color: scheme.surface.withValues(alpha: .96),
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: .45),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: scheme.primary.withValues(alpha: .12),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: .45)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: .10),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchController,
-                textInputAction: TextInputAction.go,
-                keyboardType: TextInputType.url,
-                onSubmitted: (_) => _submit(),
-                decoration: InputDecoration(
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  hintText: 'Search or enter address',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: IconButton.filled(
-                    onPressed: _submit,
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF7C4DFF),
-                      foregroundColor: Colors.white,
+                  child: TextField(
+                    controller: _searchController,
+                    textInputAction: TextInputAction.go,
+                    keyboardType: TextInputType.url,
+                    onSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      hintText: 'Search the web or enter an address',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: IconButton.filled(
+                        onPressed: _submit,
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF7248F4),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                      ),
                     ),
-                    icon: const Icon(Icons.arrow_forward_rounded),
                   ),
                 ),
               ),
             ),
-            if (widget.clipboardUrl != null) ...[
-              const SizedBox(height: 14),
-              _ClipboardLinkCard(
-                url: widget.clipboardUrl!,
-                onOpen: widget.onOpenClipboard!,
-                onDownload: widget.onDownloadClipboard!,
-              ),
-            ],
-            AnimatedBuilder(
-              animation: DownloadManager.instance,
-              builder: (context, _) {
-                final active = DownloadManager.instance.tasks
-                    .where((task) => task.isActive)
-                    .toList();
-                final speed = active.fold<double>(
-                  0,
-                  (sum, task) => sum + task.speedBytesPerSecond,
-                );
-                if (active.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: _BrowserStatusCard(
-                    activeCount: active.length,
-                    speedBytesPerSecond: speed,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Top sites',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            if (widget.clipboardUrl != null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _ClipboardLinkCard(
+                    url: widget.clipboardUrl!,
+                    onOpen: widget.onOpenClipboard!,
+                    onDownload: widget.onDownloadClipboard!,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _addShortcut,
-                  icon: const Icon(Icons.add_rounded, size: 19),
-                  label: const Text('Add'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                mainAxisSpacing: 18,
-                crossAxisSpacing: 12,
-                childAspectRatio: .72,
               ),
-              itemCount: _sites.length + 1,
-              itemBuilder: (context, index) {
-                if (index == _sites.length) {
-                  return _AddSiteTile(onTap: _addShortcut);
-                }
-                final site = _sites[index];
-                return _SiteTile(
-                  site: site,
-                  index: index,
-                  onTap: () => widget.onOpenSite(site.url),
-                  onEdit: () => _editShortcut(index),
-                  onMove: _moveSite,
-                );
-              },
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: AnimatedBuilder(
+                  animation: DownloadManager.instance,
+                  builder: (context, _) {
+                    final active = DownloadManager.instance.tasks.where((task) => task.isActive).toList();
+                    final speed = active.fold<double>(0, (sum, task) => sum + task.speedBytesPerSecond);
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _BrowserQuickCard(
+                            icon: Icons.downloading_rounded,
+                            title: active.isEmpty ? 'No active downloads' : '${active.length} downloading',
+                            subtitle: active.isEmpty ? 'Your downloads are under control' : _browserFormatSpeed(speed),
+                            color: const Color(0xFF6D4AFF),
+                            onTap: () {},
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _BrowserQuickCard(
+                            icon: Icons.security_rounded,
+                            title: 'Safe browsing',
+                            subtitle: 'HTTPS status is shown in the address bar',
+                            color: const Color(0xFF159A78),
+                            onTap: () {},
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 10),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Expanded(child: Text('Quick access', style: TextStyle(color: scheme.onSurface, fontSize: 19, fontWeight: FontWeight.w900))),
+                    TextButton.icon(onPressed: _addShortcut, icon: const Icon(Icons.add_rounded), label: const Text('Add')),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  mainAxisSpacing: 18,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: .76,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    if (index == _sites.length) return _AddSiteTile(onTap: _addShortcut);
+                    final site = _sites[index];
+                    return _SiteTile(
+                      site: site,
+                      index: index,
+                      onTap: () => widget.onOpenSite(site.url),
+                      onEdit: () => _editShortcut(index),
+                      onMove: _moveSite,
+                    );
+                  },
+                  childCount: _sites.length + 1,
+                ),
+              ),
             ),
             if (widget.recentUrls.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Text('Recently visited', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 82,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: widget.recentUrls.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 10),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Continue browsing',
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList.separated(
+                  itemCount: widget.recentUrls.length > 4 ? 4 : widget.recentUrls.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final url = widget.recentUrls[index];
                     final host = Uri.tryParse(url)?.host.replaceFirst('www.', '') ?? url;
-                    return ActionChip(
-                      avatar: const Icon(Icons.history_rounded, size: 18),
-                      label: SizedBox(width: 110, child: Text(host, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      onPressed: () => widget.onOpenSite(url),
+                    return Material(
+                      color: scheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        leading: CircleAvatar(
+                          backgroundColor: scheme.primaryContainer,
+                          child: Icon(Icons.history_rounded, color: scheme.primary),
+                        ),
+                        title: Text(host, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: const Icon(Icons.arrow_forward_rounded),
+                        onTap: () => widget.onOpenSite(url),
+                      ),
                     );
                   },
                 ),
               ),
             ],
-            if (widget.mostVisitedUrls.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Most visited',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  Icon(Icons.local_fire_department_rounded),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: widget.mostVisitedUrls.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final url = widget.mostVisitedUrls[index];
-                    final host = Uri.tryParse(url)?.host.replaceFirst('www.', '') ?? url;
-                    return ActionChip(
-                      avatar: const Icon(Icons.trending_up_rounded, size: 18),
-                      label: Text(host),
-                      onPressed: () => widget.onOpenSite(url),
-                    );
-                  },
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Discover',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                  ),
-                ),
-                Icon(Icons.auto_awesome_rounded, color: scheme.primary),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _DiscoverCard(
-              icon: Icons.folder_copy_rounded,
-              title: 'Browse. Download. Organize.',
-              subtitle: 'Open direct links, manage active downloads, and find every saved file in File Hub.',
-              colors: const [Color(0xFF180A3D), Color(0xFF4C1D95), Color(0xFF7C3AED)],
-              onTap: () {},
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniDiscoverCard(
-                    icon: Icons.download_for_offline_rounded,
-                    title: 'Direct downloads',
-                    color: const Color(0xFF536DFE),
-                    onTap: () {},
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _MiniDiscoverCard(
-                    icon: Icons.bolt_rounded,
-                    title: 'File Hub ready',
-                    color: const Color(0xFFEC407A),
-                    onTap: () {},
-                  ),
-                ),
-              ],
-            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 30)),
           ],
         ),
       ),
@@ -1568,23 +1707,60 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
   }
 }
 
-class _RoundAction extends StatelessWidget {
-  const _RoundAction({
+String _browserFormatSpeed(double value) {
+  if (value < 1024) return '${value.toStringAsFixed(0)} B/s';
+  if (value < 1024 * 1024) return '${(value / 1024).toStringAsFixed(1)} KB/s';
+  return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+}
+
+class _BrowserQuickCard extends StatelessWidget {
+  const _BrowserQuickCard({
     required this.icon,
-    required this.tooltip,
+    required this.title,
+    required this.subtitle,
+    required this.color,
     required this.onTap,
   });
 
   final IconData icon;
-  final String tooltip;
+  final String title;
+  final String subtitle;
+  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton.filledTonal(
-      onPressed: onTap,
-      tooltip: tooltip,
-      icon: Icon(icon),
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 126),
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: .4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: color.withValues(alpha: .13), borderRadius: BorderRadius.circular(13)),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(height: 12),
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, height: 1.25)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1743,208 +1919,6 @@ class _ClipboardLinkCard extends StatelessWidget {
           IconButton(onPressed: onOpen, tooltip: 'Open', icon: const Icon(Icons.open_in_browser_rounded)),
           IconButton.filled(onPressed: onDownload, tooltip: 'Download', icon: const Icon(Icons.download_rounded)),
         ],
-      ),
-    );
-  }
-}
-
-class _BrowserStatusCard extends StatelessWidget {
-  const _BrowserStatusCard({
-    required this.activeCount,
-    required this.speedBytesPerSecond,
-  });
-
-  final int activeCount;
-  final double speedBytesPerSecond;
-
-  String _formatSpeed(double value) {
-    if (value < 1024) return '${value.toStringAsFixed(0)} B/s';
-    if (value < 1024 * 1024) return '${(value / 1024).toStringAsFixed(1)} KB/s';
-    return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB/s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5B35C8), Color(0xFF8B5CF6)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6D4AFF).withValues(alpha: .22),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .22),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(Icons.downloading_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$activeCount active download${activeCount == 1 ? '' : 's'}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _formatSpeed(speedBytesPerSecond),
-                  style: TextStyle(color: Colors.white.withValues(alpha: .78)),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.bolt_rounded, color: Colors.white),
-        ],
-      ),
-    );
-  }
-}
-
-class _DiscoverCard extends StatelessWidget {
-  const _DiscoverCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<Color> colors;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(26),
-      onTap: onTap,
-      child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: colors,
-          ),
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: Colors.white.withValues(alpha: .28), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: colors.last.withValues(alpha: .42),
-              blurRadius: 30,
-              spreadRadius: 1,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .18),
-                borderRadius: BorderRadius.circular(17),
-              ),
-              child: Icon(icon, color: Colors.white, size: 30),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: .94),
-                      fontWeight: FontWeight.w500,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniDiscoverCard extends StatelessWidget {
-  const _MiniDiscoverCard({
-    required this.icon,
-    required this.title,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: onTap,
-      child: Ink(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: scheme.surface.withValues(alpha: .88),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: .45),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: .13),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ],
-        ),
       ),
     );
   }

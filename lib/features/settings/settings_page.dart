@@ -105,10 +105,47 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Clear browser data',
                 subtitle: 'History, cookies and cached files',
               ),
-              const _SettingTile(
+            ],
+          ),
+          _group(
+            context,
+            title: 'Filexa services',
+            children: const [
+              _SettingTile(
+                icon: Icons.workspace_premium_outlined,
+                title: 'Filexa Premium',
+                subtitle: 'No ads and advanced tools • coming later',
+              ),
+              _SettingTile(
+                icon: Icons.extension_outlined,
+                title: 'Extensions',
+                subtitle: 'Add only the tools you need • planned',
+              ),
+              _SettingTile(
+                icon: Icons.cloud_outlined,
+                title: 'Backup & cloud',
+                subtitle: 'Keep important files available across devices',
+              ),
+              _SettingTile(
+                icon: Icons.smart_toy_outlined,
+                title: 'Filexa Assistant',
+                subtitle: 'Smart file help • planned for a future release',
+              ),
+            ],
+          ),
+          _group(
+            context,
+            title: 'About',
+            children: const [
+              _SettingTile(
                 icon: Icons.info_outline_rounded,
                 title: 'About Filexa',
-                subtitle: 'Version 0.3.0 • Sprint 3',
+                subtitle: 'Version 1.1.0 • UI polish build',
+              ),
+              _SettingTile(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy policy',
+                subtitle: 'How Filexa protects and handles your data',
               ),
             ],
           ),

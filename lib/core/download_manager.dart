@@ -51,6 +51,7 @@ class DownloadManager extends ChangeNotifier {
     required String fileName,
     required String folder,
     Map<String, String> headers = const <String, String>{},
+    DownloadPriority priority = DownloadPriority.normal,
   }) async {
     final task = DownloadTask(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -59,6 +60,7 @@ class DownloadManager extends ChangeNotifier {
       folder: folder,
       createdAt: DateTime.now(),
       headers: Map<String, String>.unmodifiable(headers),
+      priority: priority,
     );
 
     _tasks.insert(0, task);
@@ -76,12 +78,37 @@ class DownloadManager extends ChangeNotifier {
 
     final waiting = _tasks
         .where((task) => task.status == DownloadStatus.queued)
-        .take(available)
-        .toList(growable: false);
-    for (final task in waiting) {
+        .toList(growable: false)
+      ..sort((a, b) {
+        final priority = _priorityRank(a.priority).compareTo(_priorityRank(b.priority));
+        if (priority != 0) return priority;
+        return a.createdAt.compareTo(b.createdAt);
+      });
+    for (final task in waiting.take(available)) {
       unawaited(_download(task));
     }
   }
+
+
+  bool hasDuplicateName(String fileName) {
+    final normalized = _sanitizeFileName(fileName).toLowerCase();
+    return _tasks.any((task) => task.fileName.toLowerCase() == normalized &&
+        task.status != DownloadStatus.canceled);
+  }
+
+  void setPriority(String taskId, DownloadPriority priority) {
+    final task = _findTask(taskId);
+    if (task == null || task.status == DownloadStatus.completed) return;
+    task.priority = priority;
+    notifyListeners();
+    _pumpQueue();
+  }
+
+  int _priorityRank(DownloadPriority priority) => switch (priority) {
+        DownloadPriority.high => 0,
+        DownloadPriority.normal => 1,
+        DownloadPriority.low => 2,
+      };
 
   int get queuedCount =>
       _tasks.where((task) => task.status == DownloadStatus.queued).length;
