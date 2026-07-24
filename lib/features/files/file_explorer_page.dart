@@ -240,7 +240,7 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
             ActionChip(
               label: Text(segments[i]),
               onPressed: () {
-                final path = p.join(root.path, ...segments.take(i + 1));
+                final path = p.joinAll([root.path, ...segments.take(i + 1)]);
                 _loadDirectory(Directory(path));
               },
             ),

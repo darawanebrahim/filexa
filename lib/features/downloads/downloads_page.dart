@@ -1047,8 +1047,7 @@ class _EmptyDownloads extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

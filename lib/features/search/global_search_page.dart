@@ -35,7 +35,10 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Search everything')),
       body: SafeArea(
-        child: Column(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
@@ -127,6 +130,7 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -227,13 +231,23 @@ class _SearchStart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (recent.isEmpty) {
-      return const FilexaEmptyState(
-        icon: Icons.manage_search_rounded,
-        title: 'Find anything instantly',
-        message: 'Search by file name, extension or category.',
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+            child: const FilexaEmptyState(
+              icon: Icons.manage_search_rounded,
+              title: 'Find anything instantly',
+              message: 'Search by file name, extension or category.',
+            ),
+          ),
+        ),
       );
     }
     return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
       children: [
         const FilexaSectionTitle(title: 'Recent searches'),
