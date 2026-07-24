@@ -9,6 +9,7 @@ import '../../core/providers/file_provider.dart';
 import '../../core/providers/file_metadata_provider.dart';
 import '../../core/services/file_metadata_service.dart';
 import '../../theme/filexa_ui.dart';
+import 'file_explorer_page.dart';
 
 enum _FileCategory { all, favorites, images, videos, audio, documents, archives, apps }
 enum _FileSort { newest, oldest, name, size }
@@ -78,6 +79,17 @@ class _FilesPageState extends ConsumerState<FilesPage> {
                 const SizedBox(width: 6),
               ]
             : [
+                IconButton(
+                  tooltip: 'File Explorer Pro',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => FileExplorerPage(fileService: ref.read(fileServiceProvider)),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.account_tree_rounded),
+                ),
                 IconButton(
                   tooltip: _showSearch ? 'Close search' : 'Search',
                   onPressed: () => setState(() {

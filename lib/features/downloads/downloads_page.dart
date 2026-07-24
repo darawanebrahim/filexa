@@ -111,60 +111,63 @@ class _DownloadsPageState extends State<DownloadsPage> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            AnimatedBuilder(
-              animation: DownloadManager.instance,
-              builder: (context, _) {
-                final tasks = DownloadManager.instance.tasks;
-                final running = tasks
-                    .where((task) => task.status == DownloadStatus.downloading)
-                    .length;
-                final queued = DownloadManager.instance.queuedCount;
-                final paused = DownloadManager.instance.pausedCount;
-                final totalSpeed = tasks
-                    .where((task) => task.status == DownloadStatus.downloading)
-                    .fold<double>(0, (sum, task) => sum + task.speedBytesPerSecond);
-
-                return _DownloadsHero(
-                  running: running,
-                  queued: queued,
-                  paused: paused,
-                  speed: totalSpeed,
+        child: AnimatedBuilder(
+          animation: DownloadManager.instance,
+          builder: (context, _) {
+            final allTasks = DownloadManager.instance.tasks;
+            final running = allTasks
+                .where((task) => task.status == DownloadStatus.downloading)
+                .length;
+            final queued = DownloadManager.instance.queuedCount;
+            final paused = DownloadManager.instance.pausedCount;
+            final totalSpeed = allTasks
+                .where((task) => task.status == DownloadStatus.downloading)
+                .fold<double>(
+                  0,
+                  (sum, task) => sum + task.speedBytesPerSecond,
                 );
-              },
-            ),
-            _DownloadFilters(
-              selectedIndex: _selectedFilter,
-              onSelected: (index) => setState(() => _selectedFilter = index),
-            ),
-            _DownloadsToolbar(
-              query: _query,
-              sort: _sort,
-              compactView: _compactView,
-              onQueryChanged: (value) => setState(() => _query = value),
-              onSortChanged: (value) => setState(() => _sort = value),
-              onToggleView: () => setState(() => _compactView = !_compactView),
-            ),
-            Expanded(
-              child: AnimatedBuilder(
-                animation: DownloadManager.instance,
-                builder: (context, _) {
-                  final tasks = _organizedTasks(
-                    DownloadManager.instance.tasks,
-                    _selectedFilter,
-                  );
-                  return _DownloadsContent(
+            final tasks = _organizedTasks(allTasks, _selectedFilter);
+
+            return Scrollbar(
+              child: ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.only(bottom: 120),
+                children: [
+                  _DownloadsHero(
+                    running: running,
+                    queued: queued,
+                    paused: paused,
+                    speed: totalSpeed,
+                  ),
+                  _DownloadFilters(
+                    selectedIndex: _selectedFilter,
+                    onSelected: (index) =>
+                        setState(() => _selectedFilter = index),
+                  ),
+                  _DownloadsToolbar(
+                    query: _query,
+                    sort: _sort,
+                    compactView: _compactView,
+                    onQueryChanged: (value) => setState(() => _query = value),
+                    onSortChanged: (value) => setState(() => _sort = value),
+                    onToggleView: () =>
+                        setState(() => _compactView = !_compactView),
+                  ),
+                  _DownloadsContent(
                     tasks: tasks,
                     selectedFilter: _selectedFilter,
                     query: _query,
                     compactView: _compactView,
                     onNewDownload: _newDownload,
-                  );
-                },
+                  ),
+                ],
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -468,36 +471,38 @@ class _DownloadsContent extends StatelessWidget {
       rows.add(task);
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 110),
-      itemCount: rows.length,
-      itemBuilder: (context, index) {
-        final row = rows[index];
-        if (row is String) {
-          return Padding(
-            padding: EdgeInsets.only(
-              top: index == 0 ? 0 : 10,
-              bottom: 10,
-            ),
-            child: Text(
-              row,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: List.generate(rows.length, (index) {
+          final row = rows[index];
+          if (row is String) {
+            return Padding(
+              padding: EdgeInsets.only(
+                top: index == 0 ? 0 : 10,
+                bottom: 10,
               ),
+              child: Text(
+                row,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _DownloadTaskCard(
+              task: row as DownloadTask,
+              compact: compactView,
             ),
           );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: _DownloadTaskCard(
-            task: row as DownloadTask,
-            compact: compactView,
-          ),
-        );
-      },
+        }),
+      ),
     );
   }
 }
@@ -1005,10 +1010,9 @@ class _EmptyDownloads extends StatelessWidget {
       _ => 'Add a direct file link to start your first download.',
     };
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(20, compactView ? 24 : 42, 20, 110),
-      children: [
-        Container(
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, compactView ? 24 : 42, 20, 0),
+      child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 42),
           decoration: FilexaUi.cardDecoration(context, radius: 24),
           child: Column(
@@ -1043,7 +1047,7 @@ class _EmptyDownloads extends StatelessWidget {
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -1474,8 +1474,11 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
       ),
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
+        child: Scrollbar(
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
               sliver: SliverToBoxAdapter(
@@ -1699,8 +1702,9 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
                 ),
               ),
             ],
-            const SliverToBoxAdapter(child: SizedBox(height: 30)),
-          ],
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
+            ],
+          ),
         ),
       ),
     );

@@ -29,7 +29,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
