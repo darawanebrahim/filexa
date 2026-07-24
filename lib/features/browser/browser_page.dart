@@ -1320,131 +1320,36 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
   }
 
   Future<void> _addShortcut() async {
-    final nameController = TextEditingController();
-    final urlController = TextEditingController();
     final result = await showDialog<_QuickSite>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.add_link_rounded),
-        title: const Text('Add shortcut'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                prefixIcon: Icon(Icons.label_outline_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: urlController,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Website address',
-                hintText: 'https://example.com',
-                prefixIcon: Icon(Icons.language_rounded),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              var url = urlController.text.trim();
-              if (name.isEmpty || url.isEmpty) return;
-              if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                url = 'https://$url';
-              }
-              final uri = Uri.tryParse(url);
-              if (uri == null || uri.host.isEmpty) return;
-              Navigator.pop(
-                dialogContext,
-                _QuickSite(
-                  name,
-                  name.substring(0, 1).toUpperCase(),
-                  url,
-                  const Color(0xFF7C4DFF),
-                ),
-              );
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) => const _AddShortcutDialog(),
     );
-    nameController.dispose();
-    urlController.dispose();
     if (!mounted || result == null) return;
     setState(() => _sites.add(result));
   }
 
   Future<void> _editShortcut(int index) async {
+    if (index < 0 || index >= _sites.length) return;
     final site = _sites[index];
-    final nameController = TextEditingController(text: site.name);
-    final urlController = TextEditingController(text: site.url);
-    final action = await showModalBottomSheet<String>(
+    final result = await showModalBottomSheet<_ShortcutEditResult>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Edit shortcut', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 16),
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 12),
-              TextField(controller: urlController, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Website address')),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.pop(sheetContext, 'delete'),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Delete'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(sheetContext, 'save'),
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Save'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      builder: (sheetContext) => _EditShortcutSheet(site: site),
     );
-    if (!mounted) return;
-    if (action == 'delete') {
-      setState(() => _sites.removeAt(index));
-    } else if (action == 'save') {
-      final name = nameController.text.trim();
-      var url = urlController.text.trim();
-      if (name.isEmpty || url.isEmpty) return;
-      if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://$url';
-      final uri = Uri.tryParse(url);
-      if (uri == null || uri.host.isEmpty) return;
-      setState(() {
-        _sites[index] = _QuickSite(name, name.substring(0, 1).toUpperCase(), url, site.color);
-      });
+    if (!mounted || result == null) return;
+    if (index < 0 || index >= _sites.length) return;
+
+    switch (result.action) {
+      case _ShortcutEditAction.delete:
+        setState(() => _sites.removeAt(index));
+        return;
+      case _ShortcutEditAction.save:
+        final updatedSite = result.site;
+        if (updatedSite == null) return;
+        setState(() => _sites[index] = updatedSite);
+        return;
     }
-    nameController.dispose();
-    urlController.dispose();
   }
 
   void _moveSite(int from, int to) {
@@ -1762,6 +1667,232 @@ class _BrowserQuickCard extends StatelessWidget {
               Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, height: 1.25)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+enum _ShortcutEditAction { save, delete }
+
+class _ShortcutEditResult {
+  const _ShortcutEditResult._(this.action, this.site);
+
+  const _ShortcutEditResult.save(_QuickSite site)
+      : this._(_ShortcutEditAction.save, site);
+
+  const _ShortcutEditResult.delete()
+      : this._(_ShortcutEditAction.delete, null);
+
+  final _ShortcutEditAction action;
+  final _QuickSite? site;
+}
+
+class _AddShortcutDialog extends StatefulWidget {
+  const _AddShortcutDialog();
+
+  @override
+  State<_AddShortcutDialog> createState() => _AddShortcutDialogState();
+}
+
+class _AddShortcutDialogState extends State<_AddShortcutDialog> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _urlController = TextEditingController();
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    var url = _urlController.text.trim();
+    if (name.isEmpty || url.isEmpty) {
+      setState(() => _errorText = 'Enter a name and website address.');
+      return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) {
+      setState(() => _errorText = 'Enter a valid website address.');
+      return;
+    }
+    Navigator.of(context).pop(
+      _QuickSite(
+        name,
+        name.substring(0, 1).toUpperCase(),
+        url,
+        const Color(0xFF7C4DFF),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      icon: const Icon(Icons.add_link_rounded),
+      title: const Text('Add shortcut'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                prefixIcon: Icon(Icons.label_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _urlController,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                labelText: 'Website address',
+                hintText: 'https://example.com',
+                prefixIcon: const Icon(Icons.language_rounded),
+                errorText: _errorText,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditShortcutSheet extends StatefulWidget {
+  const _EditShortcutSheet({required this.site});
+
+  final _QuickSite site;
+
+  @override
+  State<_EditShortcutSheet> createState() => _EditShortcutSheetState();
+}
+
+class _EditShortcutSheetState extends State<_EditShortcutSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _urlController;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.site.name);
+    _urlController = TextEditingController(text: widget.site.url);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    var url = _urlController.text.trim();
+    if (name.isEmpty || url.isEmpty) {
+      setState(() => _errorText = 'Enter a name and website address.');
+      return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) {
+      setState(() => _errorText = 'Enter a valid website address.');
+      return;
+    }
+    Navigator.of(context).pop(
+      _ShortcutEditResult.save(
+        _QuickSite(
+          name,
+          name.substring(0, 1).toUpperCase(),
+          url,
+          widget.site.color,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 24 + bottomInset),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Edit shortcut',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _urlController,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              decoration: InputDecoration(
+                labelText: 'Website address',
+                errorText: _errorText,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(
+                      const _ShortcutEditResult.delete(),
+                    ),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _save,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
