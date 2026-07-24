@@ -186,9 +186,11 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     if (!mounted || selected == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) AppController.setThemeMode(selected);
-    });
+
+    // The sheet has fully closed when the Future completes. Updating the root
+    // theme here keeps route disposal and inherited-widget updates separate.
+    AppController.setThemeMode(selected);
+    if (mounted) setState(() {});
   }
 
   static String _themeLabel(ThemeMode mode) => switch (mode) {

@@ -1091,34 +1091,32 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
                     PopupMenuButton<String>(
                       padding: EdgeInsets.zero,
                       icon: const Icon(Icons.more_vert_rounded, size: 22),
-                      onSelected: (value) async {
-                        if (value == 'new_tab') _addTab(_homeUrl);
-                        if (value == 'close_tab') _closeTab(_currentIndex);
-                        if (value == 'restore_tab') _reopenClosedTab();
-                        if (value == 'download') await _askDownload(_tab.url);
-                        if (value == 'copy') {
-                          final messenger = ScaffoldMessenger.of(context);
-                          await Clipboard.setData(ClipboardData(text: _tab.url));
+                      onSelected: (value) {
+                        Future<void>.delayed(const Duration(milliseconds: 150), () async {
                           if (!mounted) return;
-                          messenger.showSnackBar(
-                            const SnackBar(content: Text('Link copied')),
-                          );
-                        }
-                        if (value == 'history') {
-                          await _showSaved(
-                            'History',
-                            List.of(_history),
-                            history: true,
-                          );
-                        }
-                        if (value == 'bookmarks') {
-                          await _showSaved('Bookmarks', _bookmarks.toList());
-                        }
-                        if (value == 'share') await SharePlus.instance.share(ShareParams(text: _tab.url));
-                        if (value == 'desktop') await _toggleDesktopMode();
-                        if (value == 'find') await _findInPage();
+                          if (value == 'new_tab') _addTab(_homeUrl);
+                          if (value == 'close_tab') _closeTab(_currentIndex);
+                          if (value == 'restore_tab') _reopenClosedTab();
+                          if (value == 'download') await _askDownload(_tab.url);
+                          if (value == 'copy') {
+                            await Clipboard.setData(ClipboardData(text: _tab.url));
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context)
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(const SnackBar(content: Text('Link copied')));
+                          }
+                          if (value == 'history') {
+                            await _showSaved('History', List.of(_history), history: true);
+                          }
+                          if (value == 'bookmarks') {
+                            await _showSaved('Bookmarks', _bookmarks.toList());
+                          }
+                          if (value == 'share') await SharePlus.instance.share(ShareParams(text: _tab.url));
+                          if (value == 'desktop') await _toggleDesktopMode();
+                          if (value == 'find') await _findInPage();
+                        });
                       },
-                      itemBuilder: (_) => [
+itemBuilder: (_) => [
                         const PopupMenuItem(
                           value: 'new_tab',
                           child: ListTile(
