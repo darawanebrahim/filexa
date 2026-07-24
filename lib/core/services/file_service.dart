@@ -77,6 +77,64 @@ class FileService {
     );
   }
 
+  Future<FileItem> copyFile(FileItem item, String folderName) async {
+    final root = await getFilexaDirectory();
+    final safeFolder = _sanitizeFileName(folderName);
+    if (safeFolder.isEmpty) {
+      throw const FileSystemException('The destination folder cannot be empty.');
+    }
+    final destination = Directory(p.join(root.path, safeFolder));
+    if (!await destination.exists()) await destination.create(recursive: true);
+    final targetPath = await _availablePath(destination.path, item.name);
+    final copied = await item.file.copy(targetPath);
+    final stat = await copied.stat();
+    return FileItem(file: copied, name: p.basename(copied.path), path: copied.path, size: stat.size, modified: stat.modified);
+  }
+
+  Future<FileItem> moveFile(FileItem item, String folderName) async {
+    final root = await getFilexaDirectory();
+    final safeFolder = _sanitizeFileName(folderName);
+    if (safeFolder.isEmpty) {
+      throw const FileSystemException('The destination folder cannot be empty.');
+    }
+    final destination = Directory(p.join(root.path, safeFolder));
+    if (!await destination.exists()) await destination.create(recursive: true);
+    final targetPath = await _availablePath(destination.path, item.name);
+    File moved;
+    try {
+      moved = await item.file.rename(targetPath);
+    } on FileSystemException {
+      moved = await item.file.copy(targetPath);
+      await item.file.delete();
+    }
+    final stat = await moved.stat();
+    return FileItem(file: moved, name: p.basename(moved.path), path: moved.path, size: stat.size, modified: stat.modified);
+  }
+
+  Future<List<String>> getManagedFolders() async {
+    final root = await getFilexaDirectory();
+    if (!await root.exists()) return const <String>[];
+    final folders = <String>[];
+    await for (final entity in root.list(followLinks: false)) {
+      if (entity is Directory) folders.add(p.basename(entity.path));
+    }
+    folders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return folders;
+  }
+
+  Future<String> _availablePath(String directory, String fileName) async {
+    var candidate = p.join(directory, fileName);
+    if (!await File(candidate).exists()) return candidate;
+    final base = p.basenameWithoutExtension(fileName);
+    final extension = p.extension(fileName);
+    var index = 1;
+    while (await File(candidate).exists()) {
+      candidate = p.join(directory, '$base ($index)$extension');
+      index++;
+    }
+    return candidate;
+  }
+
   Future<void> deleteFile(FileItem item) async {
     if (await item.file.exists()) {
       await item.file.delete();

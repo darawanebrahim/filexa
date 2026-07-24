@@ -6,9 +6,11 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/file_item.dart';
 import '../../core/providers/file_provider.dart';
+import '../../core/providers/file_metadata_provider.dart';
+import '../../core/services/file_metadata_service.dart';
 import '../../theme/filexa_ui.dart';
 
-enum _FileCategory { all, images, videos, audio, documents, archives, apps }
+enum _FileCategory { all, favorites, images, videos, audio, documents, archives, apps }
 enum _FileSort { newest, oldest, name, size }
 
 class FilesPage extends ConsumerStatefulWidget {
@@ -31,6 +33,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
   @override
   Widget build(BuildContext context) {
     final filesAsync = ref.watch(filesProvider);
+    final metadata = ref.watch(fileMetadataProvider).valueOrNull ?? const FileMetadata();
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
@@ -54,6 +57,14 @@ class _FilesPageState extends ConsumerState<FilesPage> {
                 : const Text('Files', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         actions: _selectionMode
             ? [
+                IconButton(
+                  tooltip: 'Select all visible',
+                  onPressed: () {
+                    final files = _filteredAndSorted(filesAsync.valueOrNull ?? const <FileItem>[], metadata.favoritePaths);
+                    setState(() => _selectedPaths.addAll(files.map((item) => item.path)));
+                  },
+                  icon: const Icon(Icons.select_all_rounded),
+                ),
                 IconButton(
                   tooltip: 'Share selected',
                   onPressed: () => _shareSelected(filesAsync.valueOrNull ?? const []),
@@ -103,7 +114,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
             onRetry: () => ref.invalidate(filesProvider),
           ),
           data: (files) {
-            final visibleFiles = _filteredAndSorted(files);
+            final visibleFiles = _filteredAndSorted(files, metadata.favoritePaths);
             if (files.isEmpty) {
               return _EmptyFiles(onRefresh: () => ref.invalidate(filesProvider));
             }
@@ -122,6 +133,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
                     child: _CategoryStrip(
                       files: files,
                       selected: _category,
+                      favoritePaths: metadata.favoritePaths,
                       onSelected: (value) => setState(() => _category = value),
                     ),
                   ),
@@ -199,10 +211,13 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     );
   }
 
-  List<FileItem> _filteredAndSorted(List<FileItem> files) {
+  List<FileItem> _filteredAndSorted(List<FileItem> files, Set<String> favoritePaths) {
     final filtered = files.where((item) {
       final matchesQuery = _query.isEmpty || item.name.toLowerCase().contains(_query.toLowerCase());
-      return matchesQuery && _matchesCategory(item.name, _category);
+      final matchesCategory = _category == _FileCategory.favorites
+          ? favoritePaths.contains(item.path)
+          : _matchesCategory(item.name, _category);
+      return matchesQuery && matchesCategory;
     }).toList();
     filtered.sort((a, b) {
       switch (_sort) {
@@ -241,7 +256,9 @@ class _FilesPageState extends ConsumerState<FilesPage> {
 
   Future<void> _shareFile(FileItem item) async {
     try {
-      await Share.shareXFiles([XFile(item.path)], text: item.name);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(item.path)], text: item.name),
+      );
     } catch (error) {
       if (mounted) _showMessage('Could not share the file: $error');
     }
@@ -250,7 +267,9 @@ class _FilesPageState extends ConsumerState<FilesPage> {
   Future<void> _shareSelected(List<FileItem> files) async {
     final selected = files.where((item) => _selectedPaths.contains(item.path)).toList();
     if (selected.isEmpty) return;
-    await Share.shareXFiles(selected.map((item) => XFile(item.path)).toList());
+    await SharePlus.instance.share(
+      ShareParams(files: selected.map((item) => XFile(item.path)).toList()),
+    );
   }
 
   Future<void> _renameFile(FileItem item) async {
@@ -274,7 +293,8 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     controller.dispose();
     if (newName == null || newName.trim().isEmpty) return;
     try {
-      await ref.read(fileServiceProvider).renameFile(item, newName);
+      final renamed = await ref.read(fileServiceProvider).renameFile(item, newName);
+      await ref.read(fileMetadataProvider.notifier).movePath(item.path, renamed.path);
       ref.invalidate(filesProvider);
       if (mounted) _showMessage('File renamed.');
     } catch (error) {
@@ -287,6 +307,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     if (!confirmed) return;
     try {
       await ref.read(fileServiceProvider).deleteFile(item);
+      await ref.read(fileMetadataProvider.notifier).removePath(item.path);
       ref.invalidate(filesProvider);
       if (mounted) _showMessage('File deleted.');
     } catch (error) {
@@ -335,6 +356,14 @@ class _FilesPageState extends ConsumerState<FilesPage> {
         child: Wrap(
           children: [
             ListTile(leading: const Icon(Icons.open_in_new_rounded), title: const Text('Open'), onTap: () => Navigator.pop(context, 'open')),
+            ListTile(
+              leading: Icon(ref.read(fileMetadataProvider).valueOrNull?.favoritePaths.contains(item.path) == true ? Icons.star_rounded : Icons.star_border_rounded),
+              title: Text(ref.read(fileMetadataProvider).valueOrNull?.favoritePaths.contains(item.path) == true ? 'Remove from favorites' : 'Add to favorites'),
+              onTap: () => Navigator.pop(context, 'favorite'),
+            ),
+            ListTile(leading: const Icon(Icons.label_outline_rounded), title: const Text('Add tag'), onTap: () => Navigator.pop(context, 'tag')),
+            ListTile(leading: const Icon(Icons.copy_rounded), title: const Text('Copy to folder'), onTap: () => Navigator.pop(context, 'copy')),
+            ListTile(leading: const Icon(Icons.drive_file_move_rounded), title: const Text('Move to folder'), onTap: () => Navigator.pop(context, 'move')),
             ListTile(leading: const Icon(Icons.share_rounded), title: const Text('Share'), onTap: () => Navigator.pop(context, 'share')),
             ListTile(leading: const Icon(Icons.drive_file_rename_outline_rounded), title: const Text('Rename'), onTap: () => Navigator.pop(context, 'rename')),
             ListTile(leading: const Icon(Icons.info_outline_rounded), title: const Text('Details'), onTap: () => Navigator.pop(context, 'details')),
@@ -345,10 +374,85 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     );
     if (!mounted || action == null) return;
     if (action == 'open') await _openFile(item);
+    if (action == 'favorite') await ref.read(fileMetadataProvider.notifier).toggleFavorite(item.path);
+    if (action == 'tag') await _setTag(item);
+    if (action == 'copy') await _copyOrMove(item, move: false);
+    if (action == 'move') await _copyOrMove(item, move: true);
     if (action == 'share') await _shareFile(item);
     if (action == 'rename') await _renameFile(item);
     if (action == 'details') await _showDetails(item);
     if (action == 'delete') await _deleteFile(item);
+  }
+
+  Future<void> _setTag(FileItem item) async {
+    final current = ref.read(fileMetadataProvider).valueOrNull?.tags[item.path] ?? '';
+    final controller = TextEditingController(text: current);
+    final tag = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('File tag'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 24,
+          decoration: const InputDecoration(hintText: 'Work, Personal, Important…'),
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          if (current.isNotEmpty)
+            TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('Remove')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (tag == null) return;
+    await ref.read(fileMetadataProvider.notifier).setTag(item.path, tag);
+    if (mounted) _showMessage(tag.trim().isEmpty ? 'Tag removed.' : 'Tag saved.');
+  }
+
+  Future<void> _copyOrMove(FileItem item, {required bool move}) async {
+    final service = ref.read(fileServiceProvider);
+    final folders = await service.getManagedFolders();
+    if (!mounted) return;
+    final controller = TextEditingController();
+    final folder = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(move ? 'Move to folder' : 'Copy to folder'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Folder name')),
+            if (folders.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Align(alignment: Alignment.centerLeft, child: Text('Existing folders', style: Theme.of(context).textTheme.labelLarge)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: folders.take(8).map((name) => ActionChip(label: Text(name), onPressed: () => controller.text = name)).toList(),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: Text(move ? 'Move' : 'Copy')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (folder == null || folder.trim().isEmpty) return;
+    try {
+      final result = move ? await service.moveFile(item, folder) : await service.copyFile(item, folder);
+      if (move) await ref.read(fileMetadataProvider.notifier).movePath(item.path, result.path);
+      ref.invalidate(filesProvider);
+      if (mounted) _showMessage(move ? 'File moved.' : 'File copied.');
+    } catch (error) {
+      if (mounted) _showMessage('Operation failed: $error');
+    }
   }
 
   Future<void> _showDetails(FileItem item) async {
@@ -381,8 +485,9 @@ class _FilesPageState extends ConsumerState<FilesPage> {
 }
 
 class _CategoryStrip extends StatelessWidget {
-  const _CategoryStrip({required this.files, required this.selected, required this.onSelected});
+  const _CategoryStrip({required this.files, required this.selected, required this.favoritePaths, required this.onSelected});
   final List<FileItem> files;
+  final Set<String> favoritePaths;
   final _FileCategory selected;
   final ValueChanged<_FileCategory> onSelected;
 
@@ -390,6 +495,7 @@ class _CategoryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final categories = <(_FileCategory, String, IconData, Color)>[
       (_FileCategory.all, 'All', Icons.grid_view_rounded, FilexaUi.primary),
+      (_FileCategory.favorites, 'Favorites', Icons.star_rounded, const Color(0xFFF59E0B)),
       (_FileCategory.images, 'Images', Icons.image_rounded, const Color(0xFF0EA5E9)),
       (_FileCategory.videos, 'Videos', Icons.movie_rounded, const Color(0xFF2563EB)),
       (_FileCategory.audio, 'Audio', Icons.graphic_eq_rounded, const Color(0xFFEC4899)),
@@ -406,7 +512,9 @@ class _CategoryStrip extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final category = categories[index];
-          final count = files.where((item) => _matchesCategory(item.name, category.$1)).length;
+          final count = category.$1 == _FileCategory.favorites
+              ? files.where((item) => favoritePaths.contains(item.path)).length
+              : files.where((item) => _matchesCategory(item.name, category.$1)).length;
           final isSelected = selected == category.$1;
           return Material(
             color: isSelected ? category.$4.withValues(alpha: .16) : FilexaUi.surface(context),
@@ -586,6 +694,8 @@ bool _matchesCategory(String name, _FileCategory category) {
   switch (category) {
     case _FileCategory.all:
       return true;
+    case _FileCategory.favorites:
+      return false;
     case _FileCategory.images:
       return {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'}.contains(extension);
     case _FileCategory.videos:

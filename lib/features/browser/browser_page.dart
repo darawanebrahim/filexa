@@ -1113,7 +1113,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
                         if (value == 'bookmarks') {
                           await _showSaved('Bookmarks', _bookmarks.toList());
                         }
-                        if (value == 'share') await Share.share(_tab.url);
+                        if (value == 'share') await SharePlus.instance.share(ShareParams(text: _tab.url));
                         if (value == 'desktop') await _toggleDesktopMode();
                         if (value == 'find') await _findInPage();
                       },

@@ -276,7 +276,9 @@ class _DocumentCenterPageState extends ConsumerState<DocumentCenterPage> {
                 title: const Text('Share'),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  Share.shareXFiles([XFile(item.path)], subject: item.name);
+                  SharePlus.instance.share(
+                    ShareParams(files: [XFile(item.path)], subject: item.name),
+                  );
                 },
               ),
               ListTile(

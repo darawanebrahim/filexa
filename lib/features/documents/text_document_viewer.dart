@@ -36,7 +36,9 @@ class _TextDocumentViewerState extends State<TextDocumentViewer> {
         actions: [
           IconButton(
             tooltip: 'Share',
-            onPressed: () => Share.shareXFiles([XFile(widget.item.path)], subject: widget.item.name),
+            onPressed: () => SharePlus.instance.share(
+                  ShareParams(files: [XFile(widget.item.path)], subject: widget.item.name),
+                ),
             icon: const Icon(Icons.share_rounded),
           ),
           PopupMenuButton<String>(
