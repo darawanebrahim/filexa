@@ -257,7 +257,7 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
         itemCount: _recentDirectories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (_, index) {
           final path = _recentDirectories[index];
           return InputChip(
@@ -313,7 +313,7 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
       itemCount: _entities.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, index) => _ExplorerListTile(
         entity: _entities[index],
         selected: _selectedPaths.contains(_entities[index].path),

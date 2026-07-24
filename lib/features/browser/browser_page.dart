@@ -1097,9 +1097,10 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
                         if (value == 'restore_tab') _reopenClosedTab();
                         if (value == 'download') await _askDownload(_tab.url);
                         if (value == 'copy') {
+                          final messenger = ScaffoldMessenger.of(context);
                           await Clipboard.setData(ClipboardData(text: _tab.url));
                           if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             const SnackBar(content: Text('Link copied')),
                           );
                         }
@@ -1679,7 +1680,7 @@ class _BrowserStartPageState extends State<_BrowserStartPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverList.separated(
                   itemCount: widget.recentUrls.length > 4 ? 4 : widget.recentUrls.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final url = widget.recentUrls[index];
                     final host = Uri.tryParse(url)?.host.replaceFirst('www.', '') ?? url;

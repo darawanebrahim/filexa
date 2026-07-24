@@ -123,7 +123,7 @@ class _DocumentCenterPageState extends ConsumerState<DocumentCenterPage> {
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
                     sliver: SliverList.separated(
                       itemCount: documents.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final item = documents[index];
                         return _DocumentListCard(

@@ -26,7 +26,7 @@ class _SmartWorkspacePageState extends ConsumerState<SmartWorkspacePage>
     _tabController = TabController(
       length: 3,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 2) as int,
+      initialIndex: widget.initialTab.clamp(0, 2),
     );
   }
 
@@ -62,11 +62,20 @@ class _SmartWorkspacePageState extends ConsumerState<SmartWorkspacePage>
   }
 }
 
-class _CleanerTab extends ConsumerWidget {
+class _CleanerTab extends ConsumerStatefulWidget {
   const _CleanerTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CleanerTab> createState() => _CleanerTabState();
+}
+
+class _CleanerTabState extends ConsumerState<_CleanerTab> {
+  int _oldDays = 30;
+  final int _largeBytes = 100 * 1024 * 1024;
+  bool _scanning = false;
+
+  @override
+  Widget build(BuildContext context) {
     final filesAsync = ref.watch(filesProvider);
     return filesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -80,16 +89,17 @@ class _CleanerTab extends ConsumerWidget {
       data: (files) {
         final duplicates = _duplicateCandidates(files);
         final oldDownloads = files
-            .where((file) => DateTime.now().difference(file.modified).inDays >= 30)
+            .where((file) => DateTime.now().difference(file.modified).inDays >= _oldDays)
             .toList()
           ..sort((a, b) => a.modified.compareTo(b.modified));
-        final largeFiles = files.where((file) => file.size >= 100 * 1024 * 1024).toList()
+        final largeFiles = files.where((file) => file.size >= _largeBytes).toList()
           ..sort((a, b) => b.size.compareTo(a.size));
         final recoverable = _recoverableBytes(duplicates, oldDownloads);
 
         return RefreshIndicator(
           onRefresh: () async {
-            await ref.refresh(filesProvider.future);
+            ref.invalidate(filesProvider);
+            await ref.read(filesProvider.future);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
@@ -97,6 +107,45 @@ class _CleanerTab extends ConsumerWidget {
               _CleanerHero(
                 recoverableBytes: recoverable,
                 issueCount: duplicates.length + oldDownloads.length,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _scanning
+                          ? null
+                          : () async {
+                              setState(() => _scanning = true);
+                              ref.invalidate(filesProvider);
+                              await ref.read(filesProvider.future);
+                              if (mounted) setState(() => _scanning = false);
+                            },
+                      icon: _scanning
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.radar_rounded),
+                      label: Text(_scanning ? 'Scanning…' : 'Scan now'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  PopupMenuButton<int>(
+                    tooltip: 'Old file age',
+                    initialValue: _oldDays,
+                    onSelected: (value) => setState(() => _oldDays = value),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 30, child: Text('Older than 30 days')),
+                      PopupMenuItem(value: 60, child: Text('Older than 60 days')),
+                      PopupMenuItem(value: 90, child: Text('Older than 90 days')),
+                    ],
+                    child: const _CleanerOptionButton(
+                      icon: Icons.tune_rounded,
+                      label: 'Rules',
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               const FilexaSectionTitle(title: 'Recommended cleanup'),
@@ -123,9 +172,9 @@ class _CleanerTab extends ConsumerWidget {
               _CleanerCategory(
                 icon: Icons.history_toggle_off_rounded,
                 color: const Color(0xFFF59E0B),
-                title: 'Old downloads',
+                title: 'Old downloads ($_oldDays days)',
                 subtitle: oldDownloads.isEmpty
-                    ? 'No downloads older than 30 days'
+                    ? 'No downloads older than $_oldDays days'
                     : '${oldDownloads.length} files • ${_formatBytes(_sumBytes(oldDownloads))}',
                 onTap: oldDownloads.isEmpty
                     ? null
@@ -133,17 +182,41 @@ class _CleanerTab extends ConsumerWidget {
                           context,
                           ref,
                           title: 'Old downloads',
-                          message: 'Files not modified for at least 30 days.',
+                          message: 'Files not modified for at least $_oldDays days.',
                           files: oldDownloads,
                         ),
               ),
               const SizedBox(height: 10),
               _CleanerCategory(
+                icon: Icons.folder_delete_outlined,
+                color: const Color(0xFF14B8A6),
+                title: 'Empty folders',
+                subtitle: 'Find folders that contain no files',
+                onTap: () => _showEmptyFolders(context, ref),
+              ),
+              const SizedBox(height: 10),
+              _CleanerCategory(
+                icon: Icons.android_rounded,
+                color: const Color(0xFF22C55E),
+                title: 'APK files',
+                subtitle: '${files.where((file) => _extension(file.name) == 'apk').length} installers • ${_formatBytes(_sumBytes(files.where((file) => _extension(file.name) == 'apk')))}',
+                onTap: files.any((file) => _extension(file.name) == 'apk')
+                    ? () => _showFileCandidates(
+                          context,
+                          ref,
+                          title: 'APK files',
+                          message: 'Review old installers you no longer need.',
+                          files: files.where((file) => _extension(file.name) == 'apk').toList(),
+                        )
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              _CleanerCategory(
                 icon: Icons.sd_storage_rounded,
                 color: const Color(0xFF0EA5E9),
-                title: 'Large files',
+                title: 'Large files (${_formatBytes(_largeBytes)}+)',
                 subtitle: largeFiles.isEmpty
-                    ? 'No files larger than 100 MB'
+                    ? 'No files larger than ${_formatBytes(_largeBytes)}'
                     : '${largeFiles.length} files • ${_formatBytes(_sumBytes(largeFiles))}',
                 onTap: largeFiles.isEmpty
                     ? null
@@ -176,6 +249,29 @@ class _CleanerTab extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _CleanerOptionButton extends StatelessWidget {
+  const _CleanerOptionButton({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: FilexaUi.cardDecoration(context, radius: 18, elevated: false),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 19),
+          const SizedBox(width: 7),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        ],
+      ),
     );
   }
 }
@@ -627,6 +723,100 @@ class _PromptChip extends StatelessWidget {
   }
 }
 
+Future<void> _showEmptyFolders(BuildContext context, WidgetRef ref) async {
+  final service = ref.read(fileServiceProvider);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+  final folders = await service.getEmptyFolders();
+  if (!context.mounted) return;
+  Navigator.pop(context);
+  if (folders.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No empty folders found')),
+    );
+    return;
+  }
+  final selected = folders.map((folder) => folder.path).toSet();
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (context, setSheetState) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .78,
+        minChildSize: .5,
+        maxChildSize: .94,
+        builder: (context, controller) => Column(
+          children: [
+            ListTile(
+              title: const Text('Empty folders', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+              subtitle: Text('${folders.length} folders found'),
+              trailing: TextButton(
+                onPressed: () => setSheetState(() {
+                  if (selected.length == folders.length) {
+                    selected.clear();
+                  } else {
+                    selected.addAll(folders.map((folder) => folder.path));
+                  }
+                }),
+                child: Text(selected.length == folders.length ? 'Clear all' : 'Select all'),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                controller: controller,
+                itemCount: folders.length,
+                itemBuilder: (_, index) {
+                  final folder = folders[index];
+                  return CheckboxListTile(
+                    value: selected.contains(folder.path),
+                    onChanged: (value) => setSheetState(() {
+                      if (value ?? false) {
+                        selected.add(folder.path);
+                      } else {
+                        selected.remove(folder.path);
+                      }
+                    }),
+                    secondary: const Icon(Icons.folder_outlined),
+                    title: Text(folder.path.split(Platform.pathSeparator).last),
+                    subtitle: Text(folder.path, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () async {
+                          final chosen = folders.where((folder) => selected.contains(folder.path));
+                          final deleted = await service.deleteEmptyFolders(chosen);
+                          if (context.mounted) Navigator.pop(context);
+                          if (sheetContext.mounted) {
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              SnackBar(content: Text('$deleted empty folders deleted')),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: Text('Delete ${selected.length} selected'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> _showFileCandidates(
   BuildContext context,
   WidgetRef ref, {
@@ -660,6 +850,16 @@ Future<void> _showFileCandidates(
                         Text(message, style: Theme.of(context).textTheme.bodySmall),
                       ],
                     ),
+                  ),
+                  TextButton(
+                    onPressed: () => setSheetState(() {
+                      if (selected.length == files.length) {
+                        selected.clear();
+                      } else {
+                        selected.addAll(files.map((file) => file.path));
+                      }
+                    }),
+                    child: Text(selected.length == files.length ? 'Clear' : 'Select all'),
                   ),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
                 ],

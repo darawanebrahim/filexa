@@ -35,10 +35,7 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Search everything')),
       body: SafeArea(
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: Column(
+        child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
@@ -116,7 +113,7 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
                           itemCount: results.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
                           itemBuilder: (context, index) => _ResultTile(
                             item: results[index],
                             query: _query,
@@ -130,7 +127,6 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
               ),
             ),
           ],
-          ),
         ),
       ),
     );
@@ -203,15 +199,18 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
                 ),
                 const SizedBox(height: 18),
                 const Text('Sort by', style: TextStyle(fontWeight: FontWeight.w800)),
-                ..._SearchSort.values.map((value) => RadioListTile<_SearchSort>(
-                  value: value,
-                  groupValue: sort,
-                  title: Text(_sortLabel(value)),
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (newValue) {
-                    if (newValue != null) setSheetState(() => sort = newValue);
-                  },
-                )),
+                ..._SearchSort.values.map(
+                  (value) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_sortLabel(value)),
+                    trailing: Icon(
+                      sort == value
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_off_rounded,
+                    ),
+                    onTap: () => setSheetState(() => sort = value),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Apply filters'))),
               ],
@@ -231,23 +230,13 @@ class _SearchStart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (recent.isEmpty) {
-      return LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-            child: const FilexaEmptyState(
-              icon: Icons.manage_search_rounded,
-              title: 'Find anything instantly',
-              message: 'Search by file name, extension or category.',
-            ),
-          ),
-        ),
+      return const FilexaEmptyState(
+        icon: Icons.manage_search_rounded,
+        title: 'Find anything instantly',
+        message: 'Search by file name, extension or category.',
       );
     }
     return ListView(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
       children: [
         const FilexaSectionTitle(title: 'Recent searches'),

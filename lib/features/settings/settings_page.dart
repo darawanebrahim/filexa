@@ -37,14 +37,11 @@ class _SettingsPageState extends State<SettingsPage> {
             context,
             title: 'Appearance',
             children: [
-              ValueListenableBuilder<ThemeMode>(
-                valueListenable: AppController.themeMode,
-                builder: (context, mode, _) => _SettingTile(
-                  icon: Icons.palette_outlined,
-                  title: 'Theme',
-                  subtitle: _themeLabel(mode),
-                  onTap: () => _showThemePicker(mode),
-                ),
+              _SettingTile(
+                icon: Icons.palette_outlined,
+                title: 'Theme',
+                subtitle: _themeLabel(AppController.themeMode.value),
+                onTap: () => _showThemePicker(AppController.themeMode.value),
               ),
               const _SettingTile(
                 icon: Icons.language_rounded,
@@ -173,19 +170,25 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 12),
               for (final mode in ThemeMode.values)
-                RadioListTile<ThemeMode>(
-                  value: mode,
-                  groupValue: current,
+                ListTile(
+                  leading: Icon(_themeIcon(mode)),
                   title: Text(_themeLabel(mode)),
-                  secondary: Icon(_themeIcon(mode)),
-                  onChanged: (value) => Navigator.pop(context, value),
+                  trailing: Icon(
+                    current == mode
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                  ),
+                  onTap: () => Navigator.pop(context, mode),
                 ),
             ],
           ),
         ),
       ),
     );
-    if (selected != null) AppController.setThemeMode(selected);
+    if (!mounted || selected == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AppController.setThemeMode(selected);
+    });
   }
 
   static String _themeLabel(ThemeMode mode) => switch (mode) {

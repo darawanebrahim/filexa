@@ -135,6 +135,52 @@ class FileService {
     return candidate;
   }
 
+
+  Future<List<Directory>> getEmptyFolders() async {
+    final root = await getFilexaDirectory();
+    if (!await root.exists()) return const <Directory>[];
+
+    final empty = <Directory>[];
+    Future<bool> scan(Directory directory) async {
+      var hasContent = false;
+      try {
+        await for (final entity in directory.list(followLinks: false)) {
+          if (entity is File) {
+            hasContent = true;
+          } else if (entity is Directory) {
+            final childEmpty = await scan(entity);
+            if (!childEmpty) hasContent = true;
+          }
+        }
+      } on FileSystemException {
+        return false;
+      }
+      if (!hasContent && directory.path != root.path) empty.add(directory);
+      return !hasContent;
+    }
+
+    await scan(root);
+    empty.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+    return empty;
+  }
+
+  Future<int> deleteEmptyFolders(Iterable<Directory> folders) async {
+    var deleted = 0;
+    final sorted = folders.toList()
+      ..sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final folder in sorted) {
+      try {
+        if (await folder.exists() && await folder.list(followLinks: false).isEmpty) {
+          await folder.delete();
+          deleted++;
+        }
+      } on FileSystemException {
+        // Continue with the remaining folders.
+      }
+    }
+    return deleted;
+  }
+
   Future<void> deleteFile(FileItem item) async {
     if (await item.file.exists()) {
       await item.file.delete();

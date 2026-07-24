@@ -11,14 +11,15 @@ class FilexaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppController.themeMode,
-      builder: (context, themeMode, _) {
+      child: const MainNavigation(),
+      builder: (context, themeMode, child) {
         return MaterialApp(
           title: 'Filexa',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeMode,
-          home: const MainNavigation(),
+          home: child,
         );
       },
     );
