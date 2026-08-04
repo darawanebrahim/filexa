@@ -26,3 +26,11 @@
 - Feature flags and Labs
 - Downloadable language/OCR packs architecture
 - Theme center, AMOLED and premium customization
+
+## Mega Sprint 17 — Smart Actions Foundation
+- Filexa Action Center
+- Context-aware file actions
+- PDF quick tools (stage 1)
+- Smart Open for HTML and code
+- Persistent favorites integration
+- Action Center shortcuts on Home, Files and Command Palette

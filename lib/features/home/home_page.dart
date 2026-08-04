@@ -5,6 +5,7 @@ import '../../core/download_task.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
+import '../actions/filexa_action_center_page.dart';
 import '../search/global_search_page.dart';
 import '../search/command_palette_page.dart';
 import '../storage/storage_analyzer_page.dart';
@@ -111,6 +112,11 @@ class HomePage extends StatelessWidget {
                 onCommands: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const CommandPalettePage(),
+                  ),
+                ),
+                onActionCenter: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const FilexaActionCenterPage(),
                   ),
                 ),
               ),
@@ -280,6 +286,7 @@ class _QuickActions extends StatelessWidget {
     required this.onDocuments,
     required this.onSmartTools,
     required this.onCommands,
+    required this.onActionCenter,
   });
 
   final VoidCallback onNewDownload;
@@ -288,6 +295,7 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onDocuments;
   final VoidCallback onSmartTools;
   final VoidCallback onCommands;
+  final VoidCallback onActionCenter;
 
   @override
   Widget build(BuildContext context) {
@@ -327,6 +335,12 @@ class _QuickActions extends StatelessWidget {
         label: 'Commands',
         color: const Color(0xFFEC4899),
         onTap: onCommands,
+      ),
+      (
+        icon: Icons.bolt_rounded,
+        label: 'Action center',
+        color: const Color(0xFFF59E0B),
+        onTap: onActionCenter,
       ),
     ];
 

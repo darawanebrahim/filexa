@@ -4,6 +4,7 @@ import '../../core/download_manager.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
+import '../actions/filexa_action_center_page.dart';
 import '../smart/smart_workspace_page.dart';
 import '../storage/storage_analyzer_page.dart';
 import 'global_search_page.dart';
@@ -112,6 +113,14 @@ class _CommandPalettePageState extends State<CommandPalettePage> {
           subtitle: 'Open PDF, Office, HTML and code files',
           keywords: 'pdf word excel html code text',
           onTap: () => _push(context, const DocumentCenterPage()),
+        ),
+        _CommandAction(
+          icon: Icons.bolt_rounded,
+          color: const Color(0xFFF59E0B),
+          title: 'Filexa Action Center',
+          subtitle: 'Open smart actions for files by type',
+          keywords: 'action open share pdf image code file tools',
+          onTap: () => _push(context, const FilexaActionCenterPage()),
         ),
         _CommandAction(
           icon: Icons.pie_chart_rounded,

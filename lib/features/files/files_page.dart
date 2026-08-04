@@ -12,6 +12,7 @@ import '../../theme/filexa_ui.dart';
 import 'file_explorer_page.dart';
 import '../documents/code_document_viewer.dart';
 import '../documents/html_document_viewer.dart';
+import '../actions/filexa_action_center_page.dart';
 
 enum _FileCategory { all, favorites, images, videos, audio, documents, archives, apps }
 enum _FileSort { newest, oldest, name, size }
@@ -397,6 +398,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
         child: Wrap(
           children: [
             ListTile(leading: const Icon(Icons.open_in_new_rounded), title: const Text('Open'), onTap: () => Navigator.pop(context, 'open')),
+            ListTile(leading: const Icon(Icons.bolt_rounded), title: const Text('Smart actions'), onTap: () => Navigator.pop(context, 'smart_actions')),
             ListTile(leading: const Icon(Icons.code_rounded), title: const Text('Open as text / code'), onTap: () => Navigator.pop(context, 'code')),
             ListTile(
               leading: Icon(ref.read(fileMetadataProvider).valueOrNull?.favoritePaths.contains(item.path) == true ? Icons.star_rounded : Icons.star_border_rounded),
@@ -416,6 +418,11 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     );
     if (!mounted || action == null) return;
     if (action == 'open') await _openFile(item);
+    if (action == 'smart_actions') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const FilexaActionCenterPage()),
+      );
+    }
     if (action == 'code') {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => CodeDocumentViewer(path: item.path)),
