@@ -10,6 +10,8 @@ import '../../core/providers/file_metadata_provider.dart';
 import '../../core/services/file_metadata_service.dart';
 import '../../theme/filexa_ui.dart';
 import 'file_explorer_page.dart';
+import '../documents/code_document_viewer.dart';
+import '../documents/html_document_viewer.dart';
 
 enum _FileCategory { all, favorites, images, videos, audio, documents, archives, apps }
 enum _FileSort { newest, oldest, name, size }
@@ -142,12 +144,19 @@ class _FilesPageState extends ConsumerState<FilesPage> {
                     ),
                   ),
                   SliverToBoxAdapter(
-                    child: _CategoryStrip(
-                      files: files,
-                      selected: _category,
-                      favoritePaths: metadata.favoritePaths,
-                      onSelected: (value) => setState(() => _category = value),
-                    ),
+                    child: _category == _FileCategory.all && _query.isEmpty
+                        ? _FileHomeSections(
+                            files: files,
+                            favoritePaths: metadata.favoritePaths,
+                            onViewAll: (value) => setState(() => _category = value),
+                            onOpen: _openFile,
+                          )
+                        : _CategoryStrip(
+                            files: files,
+                            selected: _category,
+                            favoritePaths: metadata.favoritePaths,
+                            onSelected: (value) => setState(() => _category = value),
+                          ),
                   ),
                   SliverToBoxAdapter(
                     child: Padding(
@@ -156,7 +165,9 @@ class _FilesPageState extends ConsumerState<FilesPage> {
                         children: [
                           Expanded(
                             child: Text(
-                              '${visibleFiles.length} result${visibleFiles.length == 1 ? '' : 's'}',
+                              _category == _FileCategory.all && _query.isEmpty
+                                  ? 'All files • ${visibleFiles.length}'
+                                  : '${visibleFiles.length} result${visibleFiles.length == 1 ? '' : 's'}',
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                             ),
                           ),
@@ -261,6 +272,24 @@ class _FilesPageState extends ConsumerState<FilesPage> {
   }
 
   Future<void> _openFile(FileItem item) async {
+    final extension = p.extension(item.name).toLowerCase();
+    if (_htmlExtensions.contains(extension)) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => HtmlDocumentViewer(path: item.path),
+        ),
+      );
+      return;
+    }
+    if (_codeExtensions.contains(extension)) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CodeDocumentViewer(path: item.path),
+        ),
+      );
+      return;
+    }
+
     final result = await OpenFilex.open(item.path);
     if (!mounted || result.type == ResultType.done) return;
     _showMessage(result.message);
@@ -368,6 +397,7 @@ class _FilesPageState extends ConsumerState<FilesPage> {
         child: Wrap(
           children: [
             ListTile(leading: const Icon(Icons.open_in_new_rounded), title: const Text('Open'), onTap: () => Navigator.pop(context, 'open')),
+            ListTile(leading: const Icon(Icons.code_rounded), title: const Text('Open as text / code'), onTap: () => Navigator.pop(context, 'code')),
             ListTile(
               leading: Icon(ref.read(fileMetadataProvider).valueOrNull?.favoritePaths.contains(item.path) == true ? Icons.star_rounded : Icons.star_border_rounded),
               title: Text(ref.read(fileMetadataProvider).valueOrNull?.favoritePaths.contains(item.path) == true ? 'Remove from favorites' : 'Add to favorites'),
@@ -386,6 +416,11 @@ class _FilesPageState extends ConsumerState<FilesPage> {
     );
     if (!mounted || action == null) return;
     if (action == 'open') await _openFile(item);
+    if (action == 'code') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => CodeDocumentViewer(path: item.path)),
+      );
+    }
     if (action == 'favorite') await ref.read(fileMetadataProvider.notifier).toggleFavorite(item.path);
     if (action == 'tag') await _setTag(item);
     if (action == 'copy') await _copyOrMove(item, move: false);
@@ -493,6 +528,233 @@ class _FilesPageState extends ConsumerState<FilesPage> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _FileHomeSections extends StatelessWidget {
+  const _FileHomeSections({
+    required this.files,
+    required this.favoritePaths,
+    required this.onViewAll,
+    required this.onOpen,
+  });
+
+  final List<FileItem> files;
+  final Set<String> favoritePaths;
+  final ValueChanged<_FileCategory> onViewAll;
+  final ValueChanged<FileItem> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = <({
+      String title,
+      IconData icon,
+      _FileCategory category,
+      Color color,
+      List<FileItem> items,
+    })>[
+      (
+        title: 'Photos',
+        icon: Icons.photo_library_rounded,
+        category: _FileCategory.images,
+        color: const Color(0xFFEC4899),
+        items: _forCategory(_FileCategory.images),
+      ),
+      (
+        title: 'Documents',
+        icon: Icons.description_rounded,
+        category: _FileCategory.documents,
+        color: const Color(0xFF3B82F6),
+        items: _forCategory(_FileCategory.documents),
+      ),
+      (
+        title: 'Apps',
+        icon: Icons.android_rounded,
+        category: _FileCategory.apps,
+        color: const Color(0xFF22C55E),
+        items: _forCategory(_FileCategory.apps),
+      ),
+      (
+        title: 'Videos',
+        icon: Icons.video_library_rounded,
+        category: _FileCategory.videos,
+        color: const Color(0xFF8B5CF6),
+        items: _forCategory(_FileCategory.videos),
+      ),
+      (
+        title: 'Audio',
+        icon: Icons.library_music_rounded,
+        category: _FileCategory.audio,
+        color: const Color(0xFFF59E0B),
+        items: _forCategory(_FileCategory.audio),
+      ),
+      (
+        title: 'Archives',
+        icon: Icons.inventory_2_rounded,
+        category: _FileCategory.archives,
+        color: const Color(0xFF14B8A6),
+        items: _forCategory(_FileCategory.archives),
+      ),
+      (
+        title: 'Favorites',
+        icon: Icons.star_rounded,
+        category: _FileCategory.favorites,
+        color: const Color(0xFFEAB308),
+        items: files.where((item) => favoritePaths.contains(item.path)).toList(),
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        children: [
+          for (final section in sections)
+            _FilePreviewSection(
+              title: section.title,
+              icon: section.icon,
+              color: section.color,
+              items: section.items,
+              onViewAll: () => onViewAll(section.category),
+              onOpen: onOpen,
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<FileItem> _forCategory(_FileCategory category) => files
+      .where((item) => _matchesCategory(item.name, category))
+      .toList()
+    ..sort((a, b) => b.modified.compareTo(a.modified));
+}
+
+class _FilePreviewSection extends StatelessWidget {
+  const _FilePreviewSection({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.items,
+    required this.onViewAll,
+    required this.onOpen,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color color;
+  final List<FileItem> items;
+  final VoidCallback onViewAll;
+  final ValueChanged<FileItem> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = items.take(4).toList();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        decoration: FilexaUi.cardDecoration(context),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: .14),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: color),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                      Text(
+                        '${items.length} item${items.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: items.isEmpty ? null : onViewAll,
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+            if (preview.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'No $title yet',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 82,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: preview.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final item = preview[index];
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(15),
+                      onTap: () => onOpen(item),
+                      child: Container(
+                        width: 170,
+                        padding: const EdgeInsets.all(11),
+                        decoration: BoxDecoration(
+                          color: FilexaUi.softSurface(context),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(_iconForFile(item.name), color: color),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    _formatBytes(item.size),
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -700,6 +962,12 @@ class _DetailRow extends StatelessWidget {
       );
 }
 
+const Set<String> _htmlExtensions = <String>{'.html', '.htm'};
+const Set<String> _codeExtensions = <String>{
+  '.css', '.js', '.mjs', '.json', '.xml', '.php', '.md', '.markdown',
+  '.yaml', '.yml', '.dart', '.txt', '.log', '.csv', '.srt', '.vtt',
+};
+
 bool _matchesCategory(String name, _FileCategory category) {
   if (category == _FileCategory.all) return true;
   final extension = p.extension(name).toLowerCase();
@@ -715,7 +983,7 @@ bool _matchesCategory(String name, _FileCategory category) {
     case _FileCategory.audio:
       return {'.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'}.contains(extension);
     case _FileCategory.documents:
-      return {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.epub'}.contains(extension);
+      return {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.epub', '.html', '.htm', '.css', '.js', '.json', '.xml', '.php', '.md', '.markdown', '.yaml', '.yml', '.dart', '.log', '.csv'}.contains(extension);
     case _FileCategory.archives:
       return {'.zip', '.rar', '.7z', '.tar', '.gz', '.iso'}.contains(extension);
     case _FileCategory.apps:

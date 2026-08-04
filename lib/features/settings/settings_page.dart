@@ -12,7 +12,6 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _downloadNotifications = true;
-  bool _clipboardDetection = true;
   bool _wifiOnly = false;
 
   @override
@@ -93,9 +92,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: const Text('Show copied links on the browser home'),
-                value: _clipboardDetection,
-                onChanged: (value) =>
-                    setState(() => _clipboardDetection = value),
+                value: AppController.clipboardDetection.value,
+                onChanged: (value) {
+                  AppController.setClipboardDetection(value);
+                  setState(() {});
+                },
               ),
               const _SettingTile(
                 icon: Icons.shield_outlined,
@@ -137,7 +138,7 @@ class _SettingsPageState extends State<SettingsPage> {
               _SettingTile(
                 icon: Icons.info_outline_rounded,
                 title: 'About Filexa',
-                subtitle: 'Version 1.1.0 • UI polish build',
+                subtitle: 'Version 1.15.0 • Smart content build',
               ),
               _SettingTile(
                 icon: Icons.privacy_tip_outlined,

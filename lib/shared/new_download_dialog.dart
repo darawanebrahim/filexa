@@ -15,18 +15,31 @@ class NewDownloadRequest {
   });
 }
 
-Future<NewDownloadRequest?> showNewDownloadDialog(BuildContext context) {
+Future<NewDownloadRequest?> showNewDownloadDialog(
+  BuildContext context, {
+  String initialUrl = '',
+  String? initialFileName,
+}) {
   return showModalBottomSheet<NewDownloadRequest>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => const _NewDownloadSheet(),
+    builder: (_) => _NewDownloadSheet(
+      initialUrl: initialUrl,
+      initialFileName: initialFileName,
+    ),
   );
 }
 
 class _NewDownloadSheet extends StatefulWidget {
-  const _NewDownloadSheet();
+  const _NewDownloadSheet({
+    required this.initialUrl,
+    this.initialFileName,
+  });
+
+  final String initialUrl;
+  final String? initialFileName;
 
   @override
   State<_NewDownloadSheet> createState() => _NewDownloadSheetState();
@@ -40,6 +53,18 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
 
   bool _isPasting = false;
   String _folder = 'Filexa app storage';
+
+  @override
+  void initState() {
+    super.initState();
+    final initialUrl = widget.initialUrl.trim();
+    if (initialUrl.isNotEmpty) {
+      _urlController.text = initialUrl;
+      _fileNameController.text = widget.initialFileName?.trim().isNotEmpty == true
+          ? widget.initialFileName!.trim()
+          : _suggestFileName(initialUrl);
+    }
+  }
 
   @override
   void dispose() {
@@ -65,7 +90,7 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
     if (uri.pathSegments.isNotEmpty) {
       final lastSegment = Uri.decodeComponent(uri.pathSegments.last).trim();
       final hasUsefulExtension = RegExp(
-        r'\.(pdf|zip|rar|7z|apk|iso|exe|msi|docx?|xlsx?|pptx?|mp3|m4a|wav|mp4|mkv|webm|avi|mov|jpg|jpeg|png|gif|webp)$',
+        r'\.(pdf|zip|rar|7z|apk|iso|exe|msi|docx?|xlsx?|pptx?|mp3|m4a|wav|mp4|mkv|webm|avi|mov|jpg|jpeg|png|gif|webp|html?|css|js|json|xml|php|md|txt|csv|srt|vtt)$',
         caseSensitive: false,
       ).hasMatch(lastSegment);
       if (lastSegment.isNotEmpty && hasUsefulExtension) {
