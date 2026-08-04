@@ -6,6 +6,7 @@ import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
 import '../search/global_search_page.dart';
+import '../search/command_palette_page.dart';
 import '../storage/storage_analyzer_page.dart';
 import '../smart/smart_workspace_page.dart';
 
@@ -105,6 +106,11 @@ class HomePage extends StatelessWidget {
                 onSmartTools: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const SmartWorkspacePage(),
+                  ),
+                ),
+                onCommands: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CommandPalettePage(),
                   ),
                 ),
               ),
@@ -273,6 +279,7 @@ class _QuickActions extends StatelessWidget {
     required this.onStorage,
     required this.onDocuments,
     required this.onSmartTools,
+    required this.onCommands,
   });
 
   final VoidCallback onNewDownload;
@@ -280,6 +287,7 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onStorage;
   final VoidCallback onDocuments;
   final VoidCallback onSmartTools;
+  final VoidCallback onCommands;
 
   @override
   Widget build(BuildContext context) {
@@ -316,9 +324,9 @@ class _QuickActions extends StatelessWidget {
       ),
       (
         icon: Icons.auto_awesome_rounded,
-        label: 'Assistant',
+        label: 'Commands',
         color: const Color(0xFFEC4899),
-        onTap: onSmartTools,
+        onTap: onCommands,
       ),
     ];
 

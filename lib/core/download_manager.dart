@@ -8,6 +8,13 @@ import 'package:path_provider/path_provider.dart';
 
 import 'download_task.dart';
 
+class DownloadValidationException implements Exception {
+  const DownloadValidationException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class DownloadManager extends ChangeNotifier {
   DownloadManager._();
 
@@ -170,6 +177,24 @@ class DownloadManager extends ChangeNotifier {
         ),
       );
 
+      final responseType = response.headers
+          .value(Headers.contentTypeHeader)
+          ?.split(';')
+          .first
+          .trim()
+          .toLowerCase();
+      final requestedExtension = p.extension(task.fileName).toLowerCase();
+      final explicitlyHtml = requestedExtension == '.html' ||
+          requestedExtension == '.htm' ||
+          requestedExtension == '.xhtml';
+      if ((responseType == 'text/html' ||
+              responseType == 'application/xhtml+xml') &&
+          !explicitlyHtml) {
+        throw const DownloadValidationException(
+          'This link returned a web page instead of a file. Open it in the browser and use a direct, permitted file link.',
+        );
+      }
+
       final resumes = existingBytes > 0 && response.statusCode == 206;
       final startBytes = resumes ? existingBytes : 0;
       if (!resumes && existingBytes > 0) {
@@ -233,6 +258,11 @@ class DownloadManager extends ChangeNotifier {
         task.status = DownloadStatus.failed;
         task.errorMessage = _friendlyDioMessage(error);
       }
+      notifyListeners();
+    } on DownloadValidationException catch (error) {
+      task.status = DownloadStatus.failed;
+      task.speedBytesPerSecond = 0;
+      task.errorMessage = error.message;
       notifyListeners();
     } on FileSystemException catch (error) {
       task.status = DownloadStatus.failed;
@@ -456,7 +486,20 @@ class DownloadManager extends ChangeNotifier {
 
   String _friendlyDioMessage(DioException error) {
     final statusCode = error.response?.statusCode;
-    if (statusCode != null) return 'Server returned HTTP $statusCode.';
+    if (statusCode != null) {
+      return switch (statusCode) {
+        400 => 'The server rejected this link. It may be a web-page link instead of a direct file link.',
+        401 => 'Login is required before this file can be downloaded.',
+        403 => 'Access denied. The link may need permission, cookies, or a valid session.',
+        404 => 'The file was not found. The link may be incorrect or expired.',
+        408 => 'The server timed out while processing the request.',
+        410 => 'This file is no longer available.',
+        416 => 'The server cannot resume this partial download. Retry from the beginning.',
+        429 => 'Too many requests. Wait a moment and retry.',
+        >= 500 => 'The server is temporarily unavailable (HTTP $statusCode).',
+        _ => 'The server rejected the download (HTTP $statusCode).',
+      };
+    }
     return switch (error.type) {
       DioExceptionType.connectionTimeout => 'Connection timed out.',
       DioExceptionType.sendTimeout => 'Upload timed out.',

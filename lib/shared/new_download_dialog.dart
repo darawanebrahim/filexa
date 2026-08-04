@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/download/link_analyzer.dart';
 import '../theme/filexa_ui.dart';
 
 class NewDownloadRequest {
@@ -52,6 +53,8 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
   final _urlFocusNode = FocusNode();
 
   bool _isPasting = false;
+  bool _isAnalyzing = false;
+  LinkAnalysis? _analysis;
   String _folder = 'Filexa app storage';
 
   @override
@@ -108,6 +111,31 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
     return '${prefix}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
+  Future<void> _analyzeLink() async {
+    final value = _urlController.text.trim();
+    if (!_isValidUrl(value)) {
+      _formKey.currentState?.validate();
+      return;
+    }
+    setState(() {
+      _isAnalyzing = true;
+      _analysis = null;
+    });
+    final result = await LinkAnalyzer.instance.analyze(value);
+    if (!mounted) return;
+    setState(() {
+      _isAnalyzing = false;
+      _analysis = result;
+    });
+    final suggestion = result.suggestedFileName?.trim();
+    if (suggestion != null && suggestion.isNotEmpty) {
+      final current = _fileNameController.text.trim();
+      if (current.isEmpty || current.startsWith('download_')) {
+        _fileNameController.text = suggestion;
+      }
+    }
+  }
+
   Future<void> _pasteFromClipboard() async {
     setState(() => _isPasting = true);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -131,6 +159,12 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    if (_analysis != null && !_analysis!.canDownload) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_analysis!.message)),
+      );
+      return;
+    }
     final fileName = _fileNameController.text.trim().isEmpty
         ? _suggestFileName(_urlController.text)
         : _fileNameController.text.trim();
@@ -245,12 +279,32 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
                     return null;
                   },
                   onChanged: (value) {
+                    if (_analysis != null) setState(() => _analysis = null);
                     if (_fileNameController.text.trim().isEmpty &&
                         _isValidUrl(value)) {
                       _fileNameController.text = _suggestFileName(value);
                     }
                   },
                 ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isAnalyzing ? null : _analyzeLink,
+                    icon: _isAnalyzing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.travel_explore_rounded),
+                    label: Text(_isAnalyzing ? 'Analyzing link…' : 'Analyze link'),
+                  ),
+                ),
+                if (_analysis != null) ...[
+                  const SizedBox(height: 10),
+                  _LinkAnalysisCard(analysis: _analysis!),
+                ],
                 const SizedBox(height: 18),
                 _SectionLabel(
                     icon: Icons.description_outlined, label: 'File name'),
@@ -332,6 +386,75 @@ class _NewDownloadSheetState extends State<_NewDownloadSheet> {
         ),
       ),
     );
+  }
+}
+
+class _LinkAnalysisCard extends StatelessWidget {
+  const _LinkAnalysisCard({required this.analysis});
+
+  final LinkAnalysis analysis;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final positive = analysis.canDownload;
+    final icon = positive
+        ? Icons.verified_rounded
+        : analysis.isWebPage
+            ? Icons.language_rounded
+            : Icons.warning_amber_rounded;
+    final tone = positive ? const Color(0xFF10B981) : colors.error;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: .09),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: tone.withValues(alpha: .32)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: tone),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  positive ? 'Ready to download' : 'Link needs attention',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(analysis.message),
+                if (analysis.contentType != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    [
+                      analysis.contentType,
+                      if (analysis.contentLength != null)
+                        _formatBytes(analysis.contentLength!),
+                      if (analysis.statusCode != null)
+                        'HTTP ${analysis.statusCode}',
+                    ].join(' • '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }
 
