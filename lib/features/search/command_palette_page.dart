@@ -4,6 +4,7 @@ import '../../core/download_manager.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
+import '../documents/pdf_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 import '../smart/smart_workspace_page.dart';
 import '../storage/storage_analyzer_page.dart';
@@ -109,9 +110,17 @@ class _CommandPalettePageState extends State<CommandPalettePage> {
         _CommandAction(
           icon: Icons.picture_as_pdf_rounded,
           color: const Color(0xFFEF4444),
+          title: 'PDF Studio',
+          subtitle: 'Search, favorite, inspect, read and share PDF files',
+          keywords: 'pdf studio reader favorite document',
+          onTap: () => _push(context, const PdfStudioPage()),
+        ),
+        _CommandAction(
+          icon: Icons.description_rounded,
+          color: const Color(0xFF0EA5E9),
           title: 'Document center',
-          subtitle: 'Open PDF, Office, HTML and code files',
-          keywords: 'pdf word excel html code text',
+          subtitle: 'Open Office, HTML, code and text files',
+          keywords: 'word excel html code text document',
           onTap: () => _push(context, const DocumentCenterPage()),
         ),
         _CommandAction(

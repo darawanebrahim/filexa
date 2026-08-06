@@ -34,3 +34,10 @@
 - Smart Open for HTML and code
 - Persistent favorites integration
 - Action Center shortcuts on Home, Files and Command Palette
+
+
+## Mega Sprint 18
+- [x] Module 1 — PDF Studio Foundation
+- [ ] Module 2 — Smart Media & OCR Tools
+- [ ] Module 3 — PDF manipulation engine (merge/split/rotate/sign/annotate)
+- [ ] Final stability and performance pass

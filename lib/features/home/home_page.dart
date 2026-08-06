@@ -5,6 +5,7 @@ import '../../core/download_task.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
+import '../documents/pdf_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 import '../search/global_search_page.dart';
 import '../search/command_palette_page.dart';
@@ -101,7 +102,7 @@ class HomePage extends StatelessWidget {
                 ),
                 onDocuments: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => const DocumentCenterPage(),
+                    builder: (_) => const PdfStudioPage(),
                   ),
                 ),
                 onSmartTools: () => Navigator.of(context).push(
