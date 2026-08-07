@@ -30,13 +30,15 @@ class _BrowserTab {
 
 class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
   static const _homeUrl = 'filexa://home';
-  static const _searchUrl = 'https://www.google.com';
+  static const _searchUrl = 'https://www.bing.com';
   static const _downloadChannel = 'FilexaDownload';
   static const _desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
-  static const _mobileUserAgent =
-      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
+  // Used only for direct HTTP downloads. Mobile WebView itself keeps the
+  // platform-native user agent by passing null to setUserAgent().
+  static const _mobileDownloadUserAgent =
+      'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
   static const _extensions = <String>{
     'apk',
@@ -111,7 +113,10 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
     late _BrowserTab tab;
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent(_mobileUserAgent)
+      // Keep Android WebView's native user agent in mobile mode. A stale or
+      // synthetic UA can make search providers classify normal browsing as
+      // automated traffic and show repeated image challenges.
+      ..setUserAgent(null)
       ..setBackgroundColor(Colors.transparent)
       ..addJavaScriptChannel(
         _downloadChannel,
@@ -358,7 +363,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
     final parsed = Uri.tryParse(value);
     if (parsed != null && parsed.hasScheme) return value;
     if (value.contains('.') && !value.contains(' ')) return 'https://$value';
-    return 'https://www.google.com/search?q=${Uri.encodeQueryComponent(value)}';
+    return 'https://www.bing.com/search?q=${Uri.encodeQueryComponent(value)}';
   }
 
   Future<void> _openAddress() async {
@@ -454,7 +459,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
 
     tab.desktopMode = enableDesktop;
     await tab.controller.setUserAgent(
-      enableDesktop ? _desktopUserAgent : _mobileUserAgent,
+      enableDesktop ? _desktopUserAgent : null,
     );
 
     if (currentUrl != _homeUrl) {
@@ -651,7 +656,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
       headers: <String, String>{
         'User-Agent': _tab.desktopMode
             ? _desktopUserAgent
-            : _mobileUserAgent,
+            : _mobileDownloadUserAgent,
         if (_tab.url != _homeUrl) 'Referer': _tab.url,
       },
     );

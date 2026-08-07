@@ -41,3 +41,14 @@
 - [ ] Module 2 — Smart Media & OCR Tools
 - [ ] Module 3 — PDF manipulation engine (merge/split/rotate/sign/annotate)
 - [ ] Final stability and performance pass
+
+## Mega Sprint 18 — Module 2 (implemented)
+- Browser search / native WebView user-agent stability
+- Download pause state + progress animation fix
+- PDF Tools Core: inspect, text extraction, rotate, extract/split, delete pages, merge, save copy
+
+### Next module
+- PDF annotations/signature foundation
+- PDF page thumbnails/reorder UI
+- Image Studio foundation
+- OCR/Translate integration

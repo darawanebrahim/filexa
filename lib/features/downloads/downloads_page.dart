@@ -565,7 +565,11 @@ class _DownloadTaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final progress = task.totalBytes > 0 ? task.progress.clamp(0.0, 1.0) : null;
+    final progress = task.totalBytes > 0
+        ? task.progress.clamp(0.0, 1.0)
+        : task.status == DownloadStatus.paused
+            ? 0.0
+            : null;
 
     return InkWell(
       borderRadius: BorderRadius.circular(22),
@@ -643,11 +647,16 @@ class _DownloadTaskCard extends StatelessWidget {
                   ),
                   _MetaPill(
                     icon: Icons.speed_rounded,
-                    text: task.speedBytesPerSecond > 0
-                        ? '${_formatBytes(task.speedBytesPerSecond.round())}/s'
-                        : 'Starting…',
+                    text: task.status == DownloadStatus.paused
+                        ? 'Paused'
+                        : task.status == DownloadStatus.queued
+                            ? 'Waiting…'
+                            : task.speedBytesPerSecond > 0
+                                ? '${_formatBytes(task.speedBytesPerSecond.round())}/s'
+                                : 'Starting…',
                   ),
-                  if (task.estimatedRemaining != null)
+                  if (task.status == DownloadStatus.downloading &&
+                      task.estimatedRemaining != null)
                     _MetaPill(
                       icon: Icons.schedule_rounded,
                       text: '${_formatDuration(task.estimatedRemaining!)} left',

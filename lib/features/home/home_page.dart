@@ -4,7 +4,6 @@ import '../../core/download_manager.dart';
 import '../../core/download_task.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
-import '../documents/document_center_page.dart';
 import '../documents/pdf_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 import '../search/global_search_page.dart';
@@ -38,10 +37,14 @@ class HomePage extends StatelessWidget {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Hi, Darawan 👋',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
-            Text('Your smart file workspace',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              'Hi, Darawan 👋',
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+            ),
+            Text(
+              'Your smart file workspace',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         actions: [
@@ -153,7 +156,9 @@ class HomePage extends StatelessWidget {
               if (tasks.isEmpty)
                 const _CompactEmpty()
               else
-                ...tasks.take(4).map(
+                ...tasks
+                    .take(4)
+                    .map(
                       (task) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _RecentDownload(task: task),
@@ -244,8 +249,11 @@ class _StorageHero extends StatelessWidget {
                   color: Colors.white.withValues(alpha: .16),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               const Spacer(),
               OutlinedButton(
@@ -300,50 +308,51 @@ class _QuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = <({IconData icon, String label, Color color, VoidCallback onTap})>[
-      (
-        icon: Icons.add_link_rounded,
-        label: 'New download',
-        color: FilexaUi.primary,
-        onTap: onNewDownload,
-      ),
-      (
-        icon: Icons.manage_search_rounded,
-        label: 'Search',
-        color: FilexaUi.indigo,
-        onTap: onSearch,
-      ),
-      (
-        icon: Icons.pie_chart_rounded,
-        label: 'Storage',
-        color: const Color(0xFF0EA5E9),
-        onTap: onStorage,
-      ),
-      (
-        icon: Icons.picture_as_pdf_rounded,
-        label: 'PDF center',
-        color: const Color(0xFFEF4444),
-        onTap: onDocuments,
-      ),
-      (
-        icon: Icons.cleaning_services_rounded,
-        label: 'Smart cleaner',
-        color: const Color(0xFF10B981),
-        onTap: onSmartTools,
-      ),
-      (
-        icon: Icons.auto_awesome_rounded,
-        label: 'Commands',
-        color: const Color(0xFFEC4899),
-        onTap: onCommands,
-      ),
-      (
-        icon: Icons.bolt_rounded,
-        label: 'Action center',
-        color: const Color(0xFFF59E0B),
-        onTap: onActionCenter,
-      ),
-    ];
+    final actions =
+        <({IconData icon, String label, Color color, VoidCallback onTap})>[
+          (
+            icon: Icons.add_link_rounded,
+            label: 'New download',
+            color: FilexaUi.primary,
+            onTap: onNewDownload,
+          ),
+          (
+            icon: Icons.manage_search_rounded,
+            label: 'Search',
+            color: FilexaUi.indigo,
+            onTap: onSearch,
+          ),
+          (
+            icon: Icons.pie_chart_rounded,
+            label: 'Storage',
+            color: const Color(0xFF0EA5E9),
+            onTap: onStorage,
+          ),
+          (
+            icon: Icons.picture_as_pdf_rounded,
+            label: 'PDF center',
+            color: const Color(0xFFEF4444),
+            onTap: onDocuments,
+          ),
+          (
+            icon: Icons.cleaning_services_rounded,
+            label: 'Smart cleaner',
+            color: const Color(0xFF10B981),
+            onTap: onSmartTools,
+          ),
+          (
+            icon: Icons.auto_awesome_rounded,
+            label: 'Commands',
+            color: const Color(0xFFEC4899),
+            onTap: onCommands,
+          ),
+          (
+            icon: Icons.bolt_rounded,
+            label: 'Action center',
+            color: const Color(0xFFF59E0B),
+            onTap: onActionCenter,
+          ),
+        ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -374,34 +383,41 @@ class _QuickActions extends StatelessWidget {
                 child: InkWell(
                   onTap: action.onTap,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: action.color.withValues(alpha: .14),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(action.icon, color: action.color, size: 23),
-                      ),
-                      const SizedBox(height: 7),
-                      Flexible(
-                        child: Text(
-                          action.label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: scheme.onSurface,
-                            fontSize: 10.5,
-                            height: 1.05,
-                            fontWeight: FontWeight.w800,
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: action.color.withValues(alpha: .14),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            action.icon,
+                            color: action.color,
+                            size: 23,
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 7),
+                        Flexible(
+                          child: Text(
+                            action.label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 10.5,
+                              height: 1.05,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -416,7 +432,11 @@ class _QuickActions extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.icon, required this.value, required this.label});
+  const _MetricCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
   final IconData icon;
   final String value;
   final String label;
@@ -446,7 +466,10 @@ class _MetricCard extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 Text(
                   label,
@@ -488,13 +511,17 @@ class _RecentDownload extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(task.fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(
+                  task.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
                 const SizedBox(height: 4),
-                Text(_statusLabel(task.status),
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  _statusLabel(task.status),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 if (task.isActive) ...[
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
@@ -553,10 +580,14 @@ class _SmartSuggestion extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Smart suggestion',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                Text(
+                  'Smart suggestion',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
                 SizedBox(height: 4),
-                Text('Use Storage Analyzer to discover your largest downloaded files.'),
+                Text(
+                  'Use Storage Analyzer to discover your largest downloaded files.',
+                ),
               ],
             ),
           ),
@@ -567,22 +598,22 @@ class _SmartSuggestion extends StatelessWidget {
 }
 
 IconData _statusIcon(DownloadStatus status) => switch (status) {
-      DownloadStatus.completed => Icons.check_circle_rounded,
-      DownloadStatus.downloading => Icons.downloading_rounded,
-      DownloadStatus.paused => Icons.pause_circle_rounded,
-      DownloadStatus.failed => Icons.error_rounded,
-      DownloadStatus.canceled => Icons.cancel_rounded,
-      DownloadStatus.queued => Icons.schedule_rounded,
-    };
+  DownloadStatus.completed => Icons.check_circle_rounded,
+  DownloadStatus.downloading => Icons.downloading_rounded,
+  DownloadStatus.paused => Icons.pause_circle_rounded,
+  DownloadStatus.failed => Icons.error_rounded,
+  DownloadStatus.canceled => Icons.cancel_rounded,
+  DownloadStatus.queued => Icons.schedule_rounded,
+};
 
 String _statusLabel(DownloadStatus status) => switch (status) {
-      DownloadStatus.completed => 'Completed',
-      DownloadStatus.downloading => 'Downloading',
-      DownloadStatus.paused => 'Paused',
-      DownloadStatus.failed => 'Failed',
-      DownloadStatus.canceled => 'Canceled',
-      DownloadStatus.queued => 'Queued',
-    };
+  DownloadStatus.completed => 'Completed',
+  DownloadStatus.downloading => 'Downloading',
+  DownloadStatus.paused => 'Paused',
+  DownloadStatus.failed => 'Failed',
+  DownloadStatus.canceled => 'Canceled',
+  DownloadStatus.queued => 'Queued',
+};
 
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';

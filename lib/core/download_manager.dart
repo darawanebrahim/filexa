@@ -287,7 +287,13 @@ class DownloadManager extends ChangeNotifier {
     if (task == null || !task.canPause || token == null || token.isCancelled) {
       return;
     }
+    // Reflect pause immediately in the UI instead of waiting for Dio's
+    // cancellation callback. This also stops indeterminate progress
+    // animations and speed/ETA indicators as soon as the user taps Pause.
     _pauseRequested.add(taskId);
+    task.status = DownloadStatus.paused;
+    task.speedBytesPerSecond = 0;
+    notifyListeners();
     token.cancel('Paused by user');
   }
 

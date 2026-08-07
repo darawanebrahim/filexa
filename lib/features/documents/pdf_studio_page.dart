@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/models/file_item.dart';
 import '../../core/providers/file_metadata_provider.dart';
 import '../../core/providers/file_provider.dart';
+import '../../core/services/pdf_tools_service.dart';
 import '../../theme/filexa_ui.dart';
 
 enum _PdfSort { newest, oldest, name, largest }
@@ -20,6 +21,7 @@ class PdfStudioPage extends ConsumerStatefulWidget {
 }
 
 class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
+  static const PdfToolsService _pdfTools = PdfToolsService();
   final TextEditingController _searchController = TextEditingController();
   _PdfSort _sort = _PdfSort.newest;
   _PdfView _view = _PdfView.all;
@@ -140,7 +142,7 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
                           item: item,
                           favorite: favorites.contains(item.path),
                           onOpen: () => _open(item),
-                          onActions: () => _showActions(item, favorites.contains(item.path)),
+                          onActions: () => _showActions(item, favorites.contains(item.path), allPdfs),
                         );
                       },
                     ),
@@ -158,7 +160,7 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
                           favorite: favorites.contains(item.path),
                           onOpen: () => _open(item),
                           onFavorite: () => _toggleFavorite(item),
-                          onActions: () => _showActions(item, favorites.contains(item.path)),
+                          onActions: () => _showActions(item, favorites.contains(item.path), allPdfs),
                         );
                       },
                     ),
@@ -257,7 +259,7 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
     await ref.read(fileMetadataProvider.notifier).toggleFavorite(item.path);
   }
 
-  Future<void> _showActions(FileItem item, bool favorite) async {
+  Future<void> _showActions(FileItem item, bool favorite, List<FileItem> allPdfs) async {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -289,6 +291,42 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
                 onTap: () => Navigator.pop(sheetContext, 'favorite'),
               ),
               _SheetAction(
+                icon: Icons.rotate_right_rounded,
+                title: 'Rotate pages',
+                subtitle: 'Rotate selected pages 90° clockwise and save a new PDF',
+                onTap: () => Navigator.pop(sheetContext, 'rotate'),
+              ),
+              _SheetAction(
+                icon: Icons.content_cut_rounded,
+                title: 'Extract / split pages',
+                subtitle: 'Create a new PDF from page ranges such as 1-3,5',
+                onTap: () => Navigator.pop(sheetContext, 'extract'),
+              ),
+              _SheetAction(
+                icon: Icons.delete_sweep_outlined,
+                title: 'Delete pages',
+                subtitle: 'Remove selected pages and save a new PDF copy',
+                onTap: () => Navigator.pop(sheetContext, 'delete_pages'),
+              ),
+              _SheetAction(
+                icon: Icons.call_merge_rounded,
+                title: 'Merge PDFs',
+                subtitle: 'Combine this PDF with other PDFs discovered by Filexa',
+                onTap: () => Navigator.pop(sheetContext, 'merge'),
+              ),
+              _SheetAction(
+                icon: Icons.text_snippet_outlined,
+                title: 'Extract text',
+                subtitle: 'Read searchable text from the PDF and copy or share it',
+                onTap: () => Navigator.pop(sheetContext, 'extract_text'),
+              ),
+              _SheetAction(
+                icon: Icons.save_as_rounded,
+                title: 'Save as copy',
+                subtitle: 'Create a duplicate PDF next to the original',
+                onTap: () => Navigator.pop(sheetContext, 'save_copy'),
+              ),
+              _SheetAction(
                 icon: Icons.share_rounded,
                 title: 'Share PDF',
                 subtitle: 'Send the original PDF to another app',
@@ -318,6 +356,18 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
         await _open(item);
       case 'favorite':
         await _toggleFavorite(item);
+      case 'rotate':
+        await _rotatePages(item);
+      case 'extract':
+        await _extractPages(item);
+      case 'delete_pages':
+        await _deletePages(item);
+      case 'merge':
+        await _mergePdfs(item, allPdfs);
+      case 'extract_text':
+        await _extractText(item);
+      case 'save_copy':
+        await _saveCopy(item);
       case 'share':
         await SharePlus.instance.share(
           ShareParams(files: [XFile(item.path)], subject: item.name),
@@ -334,6 +384,14 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
   }
 
   Future<void> _showInfo(FileItem item) async {
+    PdfInfo? pdfInfo;
+    try {
+      pdfInfo = await _pdfTools.inspect(item.path);
+    } catch (_) {
+      // Basic file information still remains available for malformed/encrypted PDFs.
+    }
+    if (!mounted) return;
+    final resolvedInfo = pdfInfo;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -348,6 +406,9 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
               const SizedBox(height: 16),
               _InfoRow(label: 'Name', value: item.name),
               _InfoRow(label: 'Size', value: _formatBytes(item.size)),
+              if (resolvedInfo != null) _InfoRow(label: 'Pages', value: '${resolvedInfo.pageCount}'),
+              if (resolvedInfo?.title != null) _InfoRow(label: 'Title', value: resolvedInfo!.title!),
+              if (resolvedInfo?.author != null) _InfoRow(label: 'Author', value: resolvedInfo!.author!),
               _InfoRow(label: 'Modified', value: _formatDate(item.modified)),
               _InfoRow(label: 'Location', value: item.path),
             ],
@@ -355,6 +416,238 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
         ),
       ),
     );
+  }
+
+  Future<List<int>?> _askPages(FileItem item, {required String title, required String hint}) async {
+    PdfInfo info;
+    try {
+      info = await _pdfTools.inspect(item.path);
+    } catch (error) {
+      _showToolError('Could not read this PDF: $error');
+      return null;
+    }
+    if (!mounted) return null;
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This PDF has ${info.pageCount} pages.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.text,
+              decoration: InputDecoration(
+                labelText: 'Pages',
+                hintText: hint,
+                helperText: 'Examples: 1-3,5 or 2,4,8-10',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Continue')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return null;
+    try {
+      final pages = _pdfTools.parsePageSelection(value, info.pageCount);
+      if (pages.isEmpty) throw const FormatException('Choose at least one page.');
+      return pages;
+    } on FormatException catch (error) {
+      _showToolError(error.message);
+      return null;
+    }
+  }
+
+  Future<void> _rotatePages(FileItem item) async {
+    final pages = await _askPages(item, title: 'Rotate PDF pages', hint: 'Leave blank is not allowed');
+    if (pages == null) return;
+    await _runPdfTool(
+      'Rotating pages…',
+      () => _pdfTools.rotatePages(item.path, pageIndexes: pages.toSet()),
+    );
+  }
+
+  Future<void> _extractPages(FileItem item) async {
+    final pages = await _askPages(item, title: 'Extract / split PDF', hint: '1-3,5');
+    if (pages == null) return;
+    await _runPdfTool(
+      'Extracting pages…',
+      () => _pdfTools.extractPages(item.path, pageIndexes: pages),
+    );
+  }
+
+  Future<void> _deletePages(FileItem item) async {
+    final pages = await _askPages(item, title: 'Delete PDF pages', hint: '2,4-6');
+    if (pages == null) return;
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete selected pages?'),
+        content: const Text('The original PDF is kept. Filexa saves the result as a new PDF.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Create PDF')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _runPdfTool(
+      'Removing pages…',
+      () => _pdfTools.deletePages(item.path, pageIndexes: pages.toSet()),
+    );
+  }
+
+  Future<void> _mergePdfs(FileItem item, List<FileItem> allPdfs) async {
+    final candidates = allPdfs.where((pdf) => pdf.path != item.path).toList(growable: false);
+    if (candidates.isEmpty) {
+      _showToolError('No second PDF was found to merge with this file.');
+      return;
+    }
+    if (!mounted) return;
+    final selected = <String>{};
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Merge PDFs'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: candidates.length,
+                itemBuilder: (context, index) {
+                  final pdf = candidates[index];
+                  final checked = selected.contains(pdf.path);
+                  return CheckboxListTile(
+                    value: checked,
+                    onChanged: (value) => setDialogState(() {
+                      if (value == true) {
+                        selected.add(pdf.path);
+                      } else {
+                        selected.remove(pdf.path);
+                      }
+                    }),
+                    title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(_formatBytes(pdf.size)),
+                  );
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, <String>[item.path, ...selected]),
+              child: const Text('Merge'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || result.length < 2) return;
+    await _runPdfTool('Merging PDFs…', () => _pdfTools.merge(result));
+  }
+
+  Future<void> _extractText(FileItem item) async {
+    String text;
+    try {
+      text = await _pdfTools.extractText(item.path);
+    } catch (error) {
+      _showToolError('Text extraction failed: $error');
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .78,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(child: Text('Extracted text', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
+                    IconButton(
+                      tooltip: 'Copy all',
+                      onPressed: text.trim().isEmpty ? null : () => Clipboard.setData(ClipboardData(text: text)),
+                      icon: const Icon(Icons.copy_all_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: FilexaUi.cardDecoration(sheetContext, radius: 20, elevated: false),
+                    child: SingleChildScrollView(
+                      child: SelectableText(text.trim().isEmpty ? 'No searchable text was found. This PDF may be image-only and require OCR.' : text),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveCopy(FileItem item) async {
+    await _runPdfTool('Creating a copy…', () => _pdfTools.saveAsCopy(item.path));
+  }
+
+  Future<void> _runPdfTool(String message, Future<PdfToolResult> Function() operation) async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 30)));
+    try {
+      final result = await operation();
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      ref.invalidate(filesProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Saved ${result.pageCount} page PDF: ${result.path}'),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => OpenFilex.open(result.path),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      _showToolError('PDF tool failed: $error');
+    }
+  }
+
+  void _showToolError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
