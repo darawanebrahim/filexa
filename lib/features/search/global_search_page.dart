@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../core/models/file_item.dart';
 import '../../core/providers/file_provider.dart';
 import '../../theme/filexa_ui.dart';
+import '../documents/office_studio_page.dart';
 
 enum _SearchType { all, documents, media, archives, apps }
 enum _SearchSort { relevance, newest, largest, name }
@@ -117,7 +118,7 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
                           itemBuilder: (context, index) => _ResultTile(
                             item: results[index],
                             query: _query,
-                            onTap: () => OpenFilex.open(results[index].path),
+                            onTap: () => _openResult(results[index]),
                           ),
                         ),
                       ),
@@ -130,6 +131,15 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _openResult(FileItem item) async {
+    final extension = p.extension(item.name).toLowerCase();
+    if (const {'.docx', '.xlsx', '.pptx'}.contains(extension)) {
+      await openOfficeFile(context, item);
+      return;
+    }
+    await OpenFilex.open(item.path);
   }
 
   List<FileItem> _results(List<FileItem> files) {

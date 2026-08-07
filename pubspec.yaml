@@ -2,7 +2,7 @@ name: filexa
 description: Filexa Downloader
 publish_to: "none"
 
-version: 1.19.1+38
+version: 1.19.2+39
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
@@ -20,6 +20,8 @@ dependencies:
   share_plus: ^11.0.0
   webview_flutter: ^4.10.0
   syncfusion_flutter_pdf: ^34.1.32
+  archive: ^4.0.7
+  xml: ^7.0.1
 
 dev_dependencies:
   flutter_test:

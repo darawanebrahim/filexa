@@ -6,7 +6,9 @@ import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/services/file_service.dart';
+import '../../core/models/file_item.dart';
 import '../../theme/filexa_ui.dart';
+import '../documents/office_studio_page.dart';
 
 enum _ExplorerSort { name, newest, oldest, size }
 
@@ -341,6 +343,16 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
   }
 
   Future<void> _openFile(File file) async {
+    final extension = p.extension(file.path).toLowerCase();
+    if (const {'.docx', '.xlsx', '.pptx'}.contains(extension)) {
+      final stat = await file.stat();
+      if (!mounted) return;
+      await openOfficeFile(
+        context,
+        FileItem(file: file, name: p.basename(file.path), path: file.path, size: stat.size, modified: stat.modified),
+      );
+      return;
+    }
     final result = await OpenFilex.open(file.path);
     if (!mounted || result.type == ResultType.done) return;
     _showMessage(result.message);

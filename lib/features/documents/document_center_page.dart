@@ -8,6 +8,7 @@ import '../../core/models/file_item.dart';
 import '../../core/providers/file_provider.dart';
 import '../../theme/filexa_ui.dart';
 import 'text_document_viewer.dart';
+import 'office_studio_page.dart';
 
 enum _DocumentType { all, pdf, word, spreadsheet, presentation, text }
 enum _DocumentSort { newest, oldest, name, largest }
@@ -223,6 +224,11 @@ class _DocumentCenterPageState extends ConsumerState<DocumentCenterPage> {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => TextDocumentViewer(item: item)),
       );
+      return;
+    }
+    if (const {'.docx', '.xlsx', '.pptx'}.contains(extension)) {
+      if (!mounted) return;
+      await openOfficeFile(context, item);
       return;
     }
 

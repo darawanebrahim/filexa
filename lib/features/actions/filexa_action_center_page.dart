@@ -11,6 +11,7 @@ import '../../core/providers/file_provider.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/code_document_viewer.dart';
 import '../documents/html_document_viewer.dart';
+import '../documents/office_studio_page.dart';
 
 enum _ActionCategory { all, pdf, images, media, code, archives, apps, documents }
 
@@ -207,6 +208,13 @@ class _FilexaActionCenterPageState extends ConsumerState<FilexaActionCenterPage>
                   subtitle: 'Open PDF tools, details and safe file actions',
                   onTap: () => Navigator.pop(sheetContext, 'pdf_tools'),
                 ),
+              if (const {'.docx', '.xlsx', '.pptx'}.contains(p.extension(item.name).toLowerCase()))
+                FilexaSheetActionCard(
+                  icon: Icons.business_center_rounded,
+                  title: 'Open in Office Studio',
+                  subtitle: 'Edit Office content natively inside Filexa',
+                  onTap: () => Navigator.pop(sheetContext, 'office'),
+                ),
               FilexaSheetActionCard(
                 icon: Icons.share_rounded,
                 title: 'Share',
@@ -249,6 +257,9 @@ class _FilexaActionCenterPageState extends ConsumerState<FilexaActionCenterPage>
       case 'pdf_tools':
         await _showPdfTools(item);
         return;
+      case 'office':
+        await openOfficeFile(context, item);
+        return;
       case 'share':
         await SharePlus.instance.share(
           ShareParams(files: [XFile(item.path)], subject: item.name),
@@ -278,6 +289,10 @@ class _FilexaActionCenterPageState extends ConsumerState<FilexaActionCenterPage>
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => CodeDocumentViewer(path: item.path)),
       );
+      return;
+    }
+    if (const {'.docx', '.xlsx', '.pptx'}.contains(p.extension(item.name).toLowerCase())) {
+      await openOfficeFile(context, item);
       return;
     }
     final result = await OpenFilex.open(item.path);

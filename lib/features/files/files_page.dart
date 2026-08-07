@@ -12,6 +12,7 @@ import '../../theme/filexa_ui.dart';
 import 'file_explorer_page.dart';
 import '../documents/code_document_viewer.dart';
 import '../documents/html_document_viewer.dart';
+import '../documents/office_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 
 enum _FileCategory { all, favorites, images, videos, audio, documents, archives, apps }
@@ -288,6 +289,10 @@ class _FilesPageState extends ConsumerState<FilesPage> {
           builder: (_) => CodeDocumentViewer(path: item.path),
         ),
       );
+      return;
+    }
+    if (const {'.docx', '.xlsx', '.pptx'}.contains(extension)) {
+      await openOfficeFile(context, item);
       return;
     }
 

@@ -5,6 +5,7 @@ import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/document_center_page.dart';
 import '../documents/pdf_studio_page.dart';
+import '../documents/office_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 import '../smart/smart_workspace_page.dart';
 import '../storage/storage_analyzer_page.dart';
@@ -122,6 +123,14 @@ class _CommandPalettePageState extends State<CommandPalettePage> {
           subtitle: 'Open Office, HTML, code and text files',
           keywords: 'word excel html code text document',
           onTap: () => _push(context, const DocumentCenterPage()),
+        ),
+        _CommandAction(
+          icon: Icons.business_center_rounded,
+          color: const Color(0xFF2563EB),
+          title: 'Office Studio',
+          subtitle: 'Create and edit Word and Excel files inside Filexa',
+          keywords: 'word excel powerpoint docx xlsx office edit convert pdf',
+          onTap: () => _push(context, const OfficeStudioPage()),
         ),
         _CommandAction(
           icon: Icons.bolt_rounded,

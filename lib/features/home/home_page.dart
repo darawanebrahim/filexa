@@ -5,6 +5,7 @@ import '../../core/download_task.dart';
 import '../../shared/new_download_dialog.dart';
 import '../../theme/filexa_ui.dart';
 import '../documents/pdf_studio_page.dart';
+import '../documents/office_studio_page.dart';
 import '../actions/filexa_action_center_page.dart';
 import '../search/global_search_page.dart';
 import '../search/command_palette_page.dart';
@@ -106,6 +107,11 @@ class HomePage extends StatelessWidget {
                 onDocuments: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const PdfStudioPage(),
+                  ),
+                ),
+                onOffice: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const OfficeStudioPage(),
                   ),
                 ),
                 onSmartTools: () => Navigator.of(context).push(
@@ -293,6 +299,7 @@ class _QuickActions extends StatelessWidget {
     required this.onSearch,
     required this.onStorage,
     required this.onDocuments,
+    required this.onOffice,
     required this.onSmartTools,
     required this.onCommands,
     required this.onActionCenter,
@@ -302,6 +309,7 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onStorage;
   final VoidCallback onDocuments;
+  final VoidCallback onOffice;
   final VoidCallback onSmartTools;
   final VoidCallback onCommands;
   final VoidCallback onActionCenter;
@@ -333,6 +341,12 @@ class _QuickActions extends StatelessWidget {
             label: 'PDF center',
             color: const Color(0xFFEF4444),
             onTap: onDocuments,
+          ),
+          (
+            icon: Icons.business_center_rounded,
+            label: 'Office Studio',
+            color: const Color(0xFF2563EB),
+            onTap: onOffice,
           ),
           (
             icon: Icons.cleaning_services_rounded,
