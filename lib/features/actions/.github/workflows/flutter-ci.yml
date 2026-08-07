@@ -2,40 +2,42 @@ name: Filexa Flutter CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
 
-      - name: Flutter version
+      - name: Flutter Version
         run: flutter --version
 
-      - name: Get packages
+      - name: Install Dependencies
         run: flutter pub get
 
-      - name: Analyze
+      - name: Analyze Project
         run: flutter analyze
 
-      - name: Run tests
+      - name: Run Tests
         run: flutter test
 
       - name: Build APK
