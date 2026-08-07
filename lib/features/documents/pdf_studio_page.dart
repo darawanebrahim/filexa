@@ -459,50 +459,81 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
       return null;
     }
     if (!mounted) return null;
+
     var pageInput = '';
-    final value = await showDialog<String>(
+    final value = await showModalBottomSheet<String>(
       context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('This PDF has ${info.pageCount} pages.'),
-            const SizedBox(height: 12),
-            TextFormField(
-              autofocus: true,
-              keyboardType: TextInputType.text,
-              decoration: InputDecoration(
-                labelText: 'Pages',
-                hintText: hint,
-                helperText: 'Examples: 1-3,5 or 2,4,8-10',
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: title,
+        subtitle: '${info.pageCount} pages • Choose a range without leaving your workspace',
+        icon: Icons.auto_stories_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: FilexaUi.cardDecoration(sheetContext, radius: 18, elevated: false),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lightbulb_outline_rounded, color: FilexaUi.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Examples: 1-3,5 or 2,4,8-10',
+                        style: TextStyle(color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (value) => pageInput = value.trim(),
-              onFieldSubmitted: (value) {
-                final trimmed = value.trim();
-                if (trimmed.isNotEmpty) Navigator.pop(dialogContext, trimmed);
-              },
+              const SizedBox(height: 16),
+              TextFormField(
+                autofocus: true,
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  labelText: 'Pages',
+                  hintText: hint,
+                  prefixIcon: const Icon(Icons.format_list_numbered_rounded),
+                ),
+                onChanged: (value) => pageInput = value.trim(),
+                onFieldSubmitted: (value) {
+                  final trimmed = value.trim();
+                  if (trimmed.isNotEmpty) Navigator.pop(sheetContext, trimmed);
+                },
+              ),
+            ],
+          ),
+        ),
+        footer: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () {
+                  final trimmed = pageInput.trim();
+                  Navigator.pop(sheetContext, trimmed.isEmpty ? null : trimmed);
+                },
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: const Text('Continue'),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final trimmed = pageInput.trim();
-              if (trimmed.isEmpty) {
-                Navigator.pop(dialogContext);
-                return;
-              }
-              Navigator.pop(dialogContext, trimmed);
-            },
-            child: const Text('Continue'),
-          ),
-        ],
       ),
     );
+
     if (!mounted || value == null || value.trim().isEmpty) return null;
     try {
       final pages = _pdfTools.parsePageSelection(value, info.pageCount);
@@ -539,49 +570,61 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
       return;
     }
     if (!mounted) return;
+
     var orderInput = '';
-    final value = await showDialog<String>(
+    final value = await showModalBottomSheet<String>(
       context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Reorder PDF pages'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Enter all ${info.pageCount} page numbers in the order you want.'),
-            const SizedBox(height: 12),
-            TextFormField(
-              autofocus: true,
-              keyboardType: TextInputType.text,
-              decoration: const InputDecoration(
-                labelText: 'Page order',
-                hintText: '1,3,2,4',
-                helperText: 'Each page must appear exactly once.',
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Reorder PDF pages',
+        subtitle: 'Create a new copy with a custom page order',
+        icon: Icons.reorder_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter all ${info.pageCount} page numbers exactly once.',
+                style: TextStyle(color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
               ),
-              onChanged: (value) => orderInput = value.trim(),
+              const SizedBox(height: 14),
+              TextFormField(
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Page order',
+                  hintText: '1,3,2,4',
+                  prefixIcon: Icon(Icons.swap_vert_rounded),
+                ),
+                onChanged: (value) => orderInput = value.trim(),
+              ),
+            ],
+          ),
+        ),
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Cancel'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () {
+                  final trimmed = orderInput.trim();
+                  Navigator.pop(sheetContext, trimmed.isEmpty ? null : trimmed);
+                },
+                icon: const Icon(Icons.reorder_rounded),
+                label: const Text('Reorder'),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final trimmed = orderInput.trim();
-              Navigator.pop(dialogContext, trimmed.isEmpty ? null : trimmed);
-            },
-            child: const Text('Reorder'),
-          ),
-        ],
       ),
     );
     if (!mounted || value == null || value.isEmpty) return;
     try {
       final order = _pdfTools.parsePageOrder(value, info.pageCount);
-      await _runPdfTool(
-        'Reordering pages…',
-        () => _pdfTools.reorderPages(item.path, pageIndexes: order),
-      );
+      await _runPdfTool('Reordering pages…', () => _pdfTools.reorderPages(item.path, pageIndexes: order));
     } on FormatException catch (error) {
       _showToolError(error.message);
     }
@@ -590,37 +633,48 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
   Future<void> _addWatermark(FileItem item) async {
     if (!mounted) return;
     var watermark = '';
-    final value = await showDialog<String>(
+    final value = await showModalBottomSheet<String>(
       context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add text watermark'),
-        content: TextFormField(
-          autofocus: true,
-          maxLength: 80,
-          decoration: const InputDecoration(
-            labelText: 'Watermark text',
-            hintText: 'CONFIDENTIAL',
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Text watermark',
+        subtitle: 'Protect or brand every page without changing the original PDF',
+        icon: Icons.branding_watermark_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: TextFormField(
+            autofocus: true,
+            maxLength: 80,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Watermark text',
+              hintText: 'CONFIDENTIAL',
+              prefixIcon: Icon(Icons.text_fields_rounded),
+            ),
+            onChanged: (value) => watermark = value.trim(),
           ),
-          onChanged: (value) => watermark = value.trim(),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final trimmed = watermark.trim();
-              Navigator.pop(dialogContext, trimmed.isEmpty ? null : trimmed);
-            },
-            child: const Text('Add'),
-          ),
-        ],
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Cancel'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () {
+                  final trimmed = watermark.trim();
+                  Navigator.pop(sheetContext, trimmed.isEmpty ? null : trimmed);
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add watermark'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
     if (!mounted || value == null || value.isEmpty) return;
-    await _runPdfTool(
-      'Adding watermark…',
-      () => _pdfTools.addTextWatermark(item.path, text: value),
-    );
+    await _runPdfTool('Adding watermark…', () => _pdfTools.addTextWatermark(item.path, text: value));
   }
 
   Future<void> _rotatePages(FileItem item) async {
@@ -643,24 +697,46 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
 
   Future<void> _deletePages(FileItem item) async {
     final pages = await _askPages(item, title: 'Delete PDF pages', hint: '2,4-6');
-    if (pages == null) return;
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    if (pages == null || !mounted) return;
+
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete selected pages?'),
-        content: const Text('The original PDF is kept. Filexa saves the result as a new PDF.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Create PDF')),
-        ],
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Remove ${pages.length} page${pages.length == 1 ? '' : 's'}?',
+        subtitle: 'Your original PDF stays untouched. Filexa creates a new copy.',
+        icon: Icons.delete_sweep_rounded,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: FilexaUi.cardDecoration(sheetContext, radius: 18, elevated: false),
+            child: Row(
+              children: [
+                Icon(Icons.shield_outlined, color: Theme.of(sheetContext).colorScheme.primary),
+                const SizedBox(width: 12),
+                const Expanded(child: Text('Safe edit: the source file is never overwritten.')),
+              ],
+            ),
+          ),
+        ),
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext, false), child: const Text('Keep pages'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.pop(sheetContext, true),
+                icon: const Icon(Icons.auto_awesome_rounded),
+                label: const Text('Create new PDF'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
-    await _runPdfTool(
-      'Removing pages…',
-      () => _pdfTools.deletePages(item.path, pageIndexes: pages.toSet()),
-    );
+    await _runPdfTool('Removing pages…', () => _pdfTools.deletePages(item.path, pageIndexes: pages.toSet()));
   }
 
   Future<void> _mergePdfs(FileItem item, List<FileItem> allPdfs) async {
@@ -670,47 +746,62 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
       return;
     }
     if (!mounted) return;
+
     final selected = <String>{};
-    final result = await showDialog<List<String>>(
+    final result = await showModalBottomSheet<List<String>>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Merge PDFs'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 420),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: candidates.length,
-                itemBuilder: (context, index) {
-                  final pdf = candidates[index];
-                  final checked = selected.contains(pdf.path);
-                  return CheckboxListTile(
-                    value: checked,
-                    onChanged: (value) => setDialogState(() {
-                      if (value == true) {
-                        selected.add(pdf.path);
-                      } else {
-                        selected.remove(pdf.path);
-                      }
-                    }),
-                    title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(_formatBytes(pdf.size)),
-                  );
-                },
-              ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => FilexaPremiumSheet(
+          title: 'Merge PDFs',
+          subtitle: 'Select one or more PDFs to append after ${item.name}',
+          icon: Icons.call_merge_rounded,
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * .52,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
+              itemCount: candidates.length,
+              itemBuilder: (context, index) {
+                final pdf = candidates[index];
+                final checked = selected.contains(pdf.path);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Material(
+                    color: checked ? FilexaUi.primary.withValues(alpha: .10) : FilexaUi.softSurface(context),
+                    borderRadius: BorderRadius.circular(18),
+                    child: CheckboxListTile(
+                      value: checked,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      onChanged: (value) => setSheetState(() {
+                        if (value == true) {
+                          selected.add(pdf.path);
+                        } else {
+                          selected.remove(pdf.path);
+                        }
+                      }),
+                      secondary: const Icon(Icons.picture_as_pdf_rounded, color: FilexaUi.primary),
+                      title: Text(pdf.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(_formatBytes(pdf.size)),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => Navigator.pop(dialogContext, <String>[item.path, ...selected]),
-              child: const Text('Merge'),
-            ),
-          ],
+          footer: Row(
+            children: [
+              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Cancel'))),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: selected.isEmpty ? null : () => Navigator.pop(sheetContext, <String>[item.path, ...selected]),
+                  icon: const Icon(Icons.call_merge_rounded),
+                  label: Text(selected.isEmpty ? 'Select PDFs' : 'Merge ${selected.length + 1} PDFs'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

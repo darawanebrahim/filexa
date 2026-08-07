@@ -170,60 +170,56 @@ class _FilexaActionCenterPageState extends ConsumerState<FilexaActionCenterPage>
     final category = _categoryFor(item.name);
     final action = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: item.name,
+        subtitle: '${_formatBytes(item.size)} • ${_categoryLabel(category)}',
+        icon: _categoryIcon(category),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: _FileTypeIcon(name: item.name),
-                title: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${_formatBytes(item.size)} • ${_categoryLabel(category)}'),
-              ),
-              const Divider(),
-              _ActionTile(
+              FilexaSheetActionCard(
                 icon: Icons.open_in_new_rounded,
-                title: 'Open',
-                subtitle: 'Use the best available viewer',
+                title: 'Smart open',
+                subtitle: 'Use Filexa when an internal viewer is available',
                 onTap: () => Navigator.pop(sheetContext, 'open'),
               ),
               if (_isHtml(item.name))
-                _ActionTile(
+                FilexaSheetActionCard(
                   icon: Icons.language_rounded,
                   title: 'Open as webpage',
-                  subtitle: 'Render the local HTML file inside Filexa',
+                  subtitle: 'Render this HTML file inside Filexa',
                   onTap: () => Navigator.pop(sheetContext, 'html'),
                 ),
               if (_isCode(item.name))
-                _ActionTile(
+                FilexaSheetActionCard(
                   icon: Icons.code_rounded,
                   title: 'Open as code',
-                  subtitle: 'Search, line numbers and source-friendly view',
+                  subtitle: 'Source-friendly view with search and line numbers',
                   onTap: () => Navigator.pop(sheetContext, 'code'),
                 ),
               if (category == _ActionCategory.pdf)
-                _ActionTile(
+                FilexaSheetActionCard(
                   icon: Icons.picture_as_pdf_rounded,
-                  title: 'PDF quick tools',
-                  subtitle: 'Open, share, copy location and inspect details',
+                  title: 'PDF workspace',
+                  subtitle: 'Open PDF tools, details and safe file actions',
                   onTap: () => Navigator.pop(sheetContext, 'pdf_tools'),
                 ),
-              _ActionTile(
+              FilexaSheetActionCard(
                 icon: Icons.share_rounded,
                 title: 'Share',
                 subtitle: 'Send the original file to another app',
                 onTap: () => Navigator.pop(sheetContext, 'share'),
               ),
-              _ActionTile(
+              FilexaSheetActionCard(
                 icon: Icons.content_copy_rounded,
                 title: 'Copy file location',
                 subtitle: item.path,
                 onTap: () => Navigator.pop(sheetContext, 'copy_path'),
               ),
-              _ActionTile(
+              FilexaSheetActionCard(
                 icon: Icons.info_outline_rounded,
                 title: 'File details',
                 subtitle: 'Type, size, modified date and location',
@@ -292,84 +288,91 @@ class _FilexaActionCenterPageState extends ConsumerState<FilexaActionCenterPage>
   }
 
   Future<void> _showPdfTools(FileItem item) async {
-    await showModalBottomSheet<void>(
+    final action = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'PDF workspace',
+        subtitle: item.name,
+        icon: Icons.picture_as_pdf_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              const ListTile(
-                leading: CircleAvatar(child: Icon(Icons.picture_as_pdf_rounded)),
-                title: Text('PDF quick tools'),
-                subtitle: Text('Stage 1 provides safe file-level actions.'),
+              FilexaSheetActionCard(
+                icon: Icons.open_in_new_rounded,
+                title: 'Open PDF',
+                subtitle: 'Read this PDF now',
+                onTap: () => Navigator.pop(sheetContext, 'open'),
               ),
-              ListTile(
-                leading: const Icon(Icons.open_in_new_rounded),
-                title: const Text('Open PDF'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _openSmart(item);
-                },
+              FilexaSheetActionCard(
+                icon: Icons.share_rounded,
+                title: 'Share PDF',
+                subtitle: 'Send the original PDF to another app',
+                onTap: () => Navigator.pop(sheetContext, 'share'),
               ),
-              ListTile(
-                leading: const Icon(Icons.share_rounded),
-                title: const Text('Share PDF'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  SharePlus.instance.share(
-                    ShareParams(files: [XFile(item.path)], subject: item.name),
-                  );
-                },
+              FilexaSheetActionCard(
+                icon: Icons.content_copy_rounded,
+                title: 'Copy PDF location',
+                subtitle: item.path,
+                onTap: () => Navigator.pop(sheetContext, 'copy'),
               ),
-              ListTile(
-                leading: const Icon(Icons.content_copy_rounded),
-                title: const Text('Copy PDF location'),
-                onTap: () async {
-                  await Clipboard.setData(ClipboardData(text: item.path));
-                  if (!sheetContext.mounted) return;
-                  Navigator.pop(sheetContext);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline_rounded),
-                title: const Text('PDF information'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showDetails(item);
-                },
+              FilexaSheetActionCard(
+                icon: Icons.info_outline_rounded,
+                title: 'PDF information',
+                subtitle: 'Inspect size, date and storage location',
+                onTap: () => Navigator.pop(sheetContext, 'details'),
               ),
             ],
           ),
         ),
       ),
     );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'open':
+        await _openSmart(item);
+        return;
+      case 'share':
+        await SharePlus.instance.share(ShareParams(files: [XFile(item.path)], subject: item.name));
+        return;
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: item.path));
+        return;
+      case 'details':
+        await _showDetails(item);
+        return;
+    }
   }
 
   Future<void> _showDetails(FileItem item) async {
-    await showDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('File details'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DetailRow(label: 'Name', value: item.name),
-              _DetailRow(label: 'Category', value: _categoryLabel(_categoryFor(item.name))),
-              _DetailRow(label: 'Extension', value: p.extension(item.name).isEmpty ? 'None' : p.extension(item.name)),
-              _DetailRow(label: 'Size', value: _formatBytes(item.size)),
-              _DetailRow(label: 'Modified', value: item.modified.toLocal().toString().split('.').first),
-              _DetailRow(label: 'Location', value: item.path),
-            ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'File details',
+        subtitle: item.name,
+        icon: Icons.info_outline_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: FilexaUi.cardDecoration(sheetContext, radius: 20, elevated: false),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DetailRow(label: 'Name', value: item.name),
+                _DetailRow(label: 'Category', value: _categoryLabel(_categoryFor(item.name))),
+                _DetailRow(label: 'Extension', value: p.extension(item.name).isEmpty ? 'None' : p.extension(item.name)),
+                _DetailRow(label: 'Size', value: _formatBytes(item.size)),
+                _DetailRow(label: 'Modified', value: item.modified.toLocal().toString().split('.').first),
+                _DetailRow(label: 'Location', value: item.path),
+              ],
+            ),
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
-        ],
       ),
     );
   }

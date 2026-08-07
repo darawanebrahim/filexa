@@ -347,24 +347,50 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
   }
 
   Future<void> _createFolder() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
+    var folderName = '';
+    final name = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create folder'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Folder name'),
-          onSubmitted: (value) => Navigator.pop(context, value),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Create folder',
+        subtitle: 'Add a new folder without leaving your current location',
+        icon: Icons.create_new_folder_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: TextFormField(
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Folder name',
+              prefixIcon: Icon(Icons.folder_outlined),
+            ),
+            onChanged: (value) => folderName = value.trim(),
+            onFieldSubmitted: (value) {
+              final trimmed = value.trim();
+              if (trimmed.isNotEmpty) Navigator.pop(sheetContext, trimmed);
+            },
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Create')),
-        ],
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Cancel'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () {
+                  final trimmed = folderName.trim();
+                  Navigator.pop(sheetContext, trimmed.isEmpty ? null : trimmed);
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Create'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
-    controller.dispose();
+
     final current = _currentDirectory;
     if (name == null || name.trim().isEmpty || current == null) return;
     try {
@@ -380,39 +406,53 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
   }
 
   Future<void> _showEntityActions(FileSystemEntity entity) async {
+    final name = p.basename(entity.path);
     final action = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: Icon(entity is Directory ? Icons.folder_open_rounded : Icons.open_in_new_rounded),
-              title: Text(entity is Directory ? 'Open folder' : 'Open file'),
-              onTap: () => Navigator.pop(context, 'open'),
-            ),
-            if (entity is File)
-              ListTile(
-                leading: const Icon(Icons.share_rounded),
-                title: const Text('Share'),
-                onTap: () => Navigator.pop(context, 'share'),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: name,
+        subtitle: entity is Directory ? 'Folder actions' : 'Smart file actions',
+        icon: entity is Directory ? Icons.folder_rounded : Icons.insert_drive_file_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            children: [
+              FilexaSheetActionCard(
+                icon: entity is Directory ? Icons.folder_open_rounded : Icons.open_in_new_rounded,
+                title: entity is Directory ? 'Open folder' : 'Open file',
+                subtitle: entity is Directory ? 'Browse this location' : 'Open with the best available viewer',
+                onTap: () => Navigator.pop(sheetContext, 'open'),
               ),
-            ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline_rounded),
-              title: const Text('Rename'),
-              onTap: () => Navigator.pop(context, 'rename'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline_rounded),
-              title: const Text('Details'),
-              onTap: () => Navigator.pop(context, 'details'),
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_outline_rounded, color: Theme.of(context).colorScheme.error),
-              title: const Text('Delete'),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-          ],
+              if (entity is File)
+                FilexaSheetActionCard(
+                  icon: Icons.share_rounded,
+                  title: 'Share',
+                  subtitle: 'Send this file securely to another app',
+                  onTap: () => Navigator.pop(sheetContext, 'share'),
+                ),
+              FilexaSheetActionCard(
+                icon: Icons.drive_file_rename_outline_rounded,
+                title: 'Rename',
+                subtitle: 'Change the name without moving the item',
+                onTap: () => Navigator.pop(sheetContext, 'rename'),
+              ),
+              FilexaSheetActionCard(
+                icon: Icons.info_outline_rounded,
+                title: 'Details',
+                subtitle: 'Size, modified date and storage location',
+                onTap: () => Navigator.pop(sheetContext, 'details'),
+              ),
+              FilexaSheetActionCard(
+                icon: Icons.delete_outline_rounded,
+                title: 'Delete',
+                subtitle: 'Permanently remove this item after confirmation',
+                destructive: true,
+                onTap: () => Navigator.pop(sheetContext, 'delete'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -428,24 +468,48 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
 
   Future<void> _renameEntity(FileSystemEntity entity) async {
     final oldName = p.basename(entity.path);
-    final controller = TextEditingController(text: entity is File ? p.basenameWithoutExtension(oldName) : oldName);
-    final value = await showDialog<String>(
+    var newValue = entity is File ? p.basenameWithoutExtension(oldName) : oldName;
+    final value = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(entity is Directory ? 'Rename folder' : 'Rename file'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'New name'),
-          onSubmitted: (text) => Navigator.pop(context, text),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: entity is Directory ? 'Rename folder' : 'Rename file',
+        subtitle: oldName,
+        icon: Icons.drive_file_rename_outline_rounded,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: TextFormField(
+            initialValue: newValue,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'New name',
+              prefixIcon: Icon(Icons.edit_rounded),
+            ),
+            onChanged: (text) => newValue = text.trim(),
+            onFieldSubmitted: (text) {
+              final trimmed = text.trim();
+              if (trimmed.isNotEmpty) Navigator.pop(sheetContext, trimmed);
+            },
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Rename')),
-        ],
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Cancel'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.pop(sheetContext, newValue.trim().isEmpty ? null : newValue.trim()),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Rename'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
-    controller.dispose();
+
     final current = _currentDirectory;
     if (value == null || value.trim().isEmpty || current == null) return;
     try {
@@ -499,18 +563,39 @@ class _FileExplorerPageState extends State<FileExplorerPage> {
   }
 
   Future<bool> _confirmDelete(String message) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete permanently?'),
-            content: Text(message),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-            ],
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Delete permanently?',
+        subtitle: 'This action cannot be undone from Filexa yet',
+        icon: Icons.delete_forever_rounded,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: FilexaUi.cardDecoration(sheetContext, radius: 18, elevated: false),
+            child: Text(message),
           ),
-        ) ??
-        false;
+        ),
+        footer: Row(
+          children: [
+            Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext, false), child: const Text('Cancel'))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(sheetContext).colorScheme.error),
+                onPressed: () => Navigator.pop(sheetContext, true),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Delete'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result ?? false;
   }
 
   Future<void> _showDetails(FileSystemEntity entity) async {
