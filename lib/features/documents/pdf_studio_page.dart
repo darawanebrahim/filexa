@@ -297,6 +297,30 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
                 onTap: () => Navigator.pop(sheetContext, 'rotate'),
               ),
               _SheetAction(
+                icon: Icons.note_add_outlined,
+                title: 'Add blank page',
+                subtitle: 'Append a blank page and save a new PDF',
+                onTap: () => Navigator.pop(sheetContext, 'add_blank_page'),
+              ),
+              _SheetAction(
+                icon: Icons.copy_all_rounded,
+                title: 'Duplicate pages',
+                subtitle: 'Copy selected pages to the end of a new PDF',
+                onTap: () => Navigator.pop(sheetContext, 'duplicate_pages'),
+              ),
+              _SheetAction(
+                icon: Icons.reorder_rounded,
+                title: 'Reorder pages',
+                subtitle: 'Create a new PDF using a custom page order',
+                onTap: () => Navigator.pop(sheetContext, 'reorder_pages'),
+              ),
+              _SheetAction(
+                icon: Icons.branding_watermark_outlined,
+                title: 'Add text watermark',
+                subtitle: 'Place a light text watermark on every page',
+                onTap: () => Navigator.pop(sheetContext, 'watermark'),
+              ),
+              _SheetAction(
                 icon: Icons.content_cut_rounded,
                 title: 'Extract / split pages',
                 subtitle: 'Create a new PDF from page ranges such as 1-3,5',
@@ -358,6 +382,14 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
         await _toggleFavorite(item);
       case 'rotate':
         await _rotatePages(item);
+      case 'add_blank_page':
+        await _addBlankPage(item);
+      case 'duplicate_pages':
+        await _duplicatePages(item);
+      case 'reorder_pages':
+        await _reorderPages(item);
+      case 'watermark':
+        await _addWatermark(item);
       case 'extract':
         await _extractPages(item);
       case 'delete_pages':
@@ -427,9 +459,10 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
       return null;
     }
     if (!mounted) return null;
-    final controller = TextEditingController();
+    var pageInput = '';
     final value = await showDialog<String>(
       context: context,
+      barrierDismissible: true,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
         content: Column(
@@ -438,8 +471,7 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
           children: [
             Text('This PDF has ${info.pageCount} pages.'),
             const SizedBox(height: 12),
-            TextField(
-              controller: controller,
+            TextFormField(
               autofocus: true,
               keyboardType: TextInputType.text,
               decoration: InputDecoration(
@@ -447,17 +479,31 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
                 hintText: hint,
                 helperText: 'Examples: 1-3,5 or 2,4,8-10',
               ),
+              onChanged: (value) => pageInput = value.trim(),
+              onFieldSubmitted: (value) {
+                final trimmed = value.trim();
+                if (trimmed.isNotEmpty) Navigator.pop(dialogContext, trimmed);
+              },
             ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Continue')),
+          FilledButton(
+            onPressed: () {
+              final trimmed = pageInput.trim();
+              if (trimmed.isEmpty) {
+                Navigator.pop(dialogContext);
+                return;
+              }
+              Navigator.pop(dialogContext, trimmed);
+            },
+            child: const Text('Continue'),
+          ),
         ],
       ),
     );
-    controller.dispose();
-    if (value == null) return null;
+    if (!mounted || value == null || value.trim().isEmpty) return null;
     try {
       final pages = _pdfTools.parsePageSelection(value, info.pageCount);
       if (pages.isEmpty) throw const FormatException('Choose at least one page.');
@@ -466,6 +512,115 @@ class _PdfStudioPageState extends ConsumerState<PdfStudioPage> {
       _showToolError(error.message);
       return null;
     }
+  }
+
+  Future<void> _addBlankPage(FileItem item) async {
+    await _runPdfTool(
+      'Adding blank page…',
+      () => _pdfTools.addBlankPage(item.path),
+    );
+  }
+
+  Future<void> _duplicatePages(FileItem item) async {
+    final pages = await _askPages(item, title: 'Duplicate PDF pages', hint: '1,3-5');
+    if (pages == null) return;
+    await _runPdfTool(
+      'Duplicating pages…',
+      () => _pdfTools.duplicatePages(item.path, pageIndexes: pages),
+    );
+  }
+
+  Future<void> _reorderPages(FileItem item) async {
+    PdfInfo info;
+    try {
+      info = await _pdfTools.inspect(item.path);
+    } catch (error) {
+      _showToolError('Could not read this PDF: $error');
+      return;
+    }
+    if (!mounted) return;
+    var orderInput = '';
+    final value = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reorder PDF pages'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Enter all ${info.pageCount} page numbers in the order you want.'),
+            const SizedBox(height: 12),
+            TextFormField(
+              autofocus: true,
+              keyboardType: TextInputType.text,
+              decoration: const InputDecoration(
+                labelText: 'Page order',
+                hintText: '1,3,2,4',
+                helperText: 'Each page must appear exactly once.',
+              ),
+              onChanged: (value) => orderInput = value.trim(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final trimmed = orderInput.trim();
+              Navigator.pop(dialogContext, trimmed.isEmpty ? null : trimmed);
+            },
+            child: const Text('Reorder'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || value == null || value.isEmpty) return;
+    try {
+      final order = _pdfTools.parsePageOrder(value, info.pageCount);
+      await _runPdfTool(
+        'Reordering pages…',
+        () => _pdfTools.reorderPages(item.path, pageIndexes: order),
+      );
+    } on FormatException catch (error) {
+      _showToolError(error.message);
+    }
+  }
+
+  Future<void> _addWatermark(FileItem item) async {
+    if (!mounted) return;
+    var watermark = '';
+    final value = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add text watermark'),
+        content: TextFormField(
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            labelText: 'Watermark text',
+            hintText: 'CONFIDENTIAL',
+          ),
+          onChanged: (value) => watermark = value.trim(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final trimmed = watermark.trim();
+              Navigator.pop(dialogContext, trimmed.isEmpty ? null : trimmed);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || value == null || value.isEmpty) return;
+    await _runPdfTool(
+      'Adding watermark…',
+      () => _pdfTools.addTextWatermark(item.path, text: value),
+    );
   }
 
   Future<void> _rotatePages(FileItem item) async {

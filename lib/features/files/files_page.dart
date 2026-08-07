@@ -416,13 +416,15 @@ class _FilesPageState extends ConsumerState<FilesPage> {
         ),
       ),
     );
-    if (!mounted || action == null) return;
+    if (!context.mounted || action == null) return;
     if (action == 'open') await _openFile(item);
+    if (!context.mounted) return;
     if (action == 'smart_actions') {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const FilexaActionCenterPage()),
       );
     }
+    if (!context.mounted) return;
     if (action == 'code') {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => CodeDocumentViewer(path: item.path)),

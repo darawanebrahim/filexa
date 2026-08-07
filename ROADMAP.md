@@ -39,7 +39,7 @@
 ## Mega Sprint 18
 - [x] Module 1 — PDF Studio Foundation
 - [ ] Module 2 — Smart Media & OCR Tools
-- [ ] Module 3 — PDF manipulation engine (merge/split/rotate/sign/annotate)
+- [x] Module 3 — PDF page organizer + runtime dialog hotfix (add/duplicate/reorder/watermark)
 - [ ] Final stability and performance pass
 
 ## Mega Sprint 18 — Module 2 (implemented)
@@ -52,3 +52,17 @@
 - PDF page thumbnails/reorder UI
 - Image Studio foundation
 - OCR/Translate integration
+
+## Mega Sprint 18 — Module 3 (implemented)
+- PDF page-dialog lifecycle crash hotfix
+- Add blank page
+- Duplicate selected pages
+- Reorder full PDF page sequence
+- Text watermark
+- Async BuildContext lint cleanup in Browser and Files
+
+### Next module
+- Signature/annotation UI
+- Image Studio foundation
+- OCR + Translate integration
+- Final Mega Sprint 18 stability pass

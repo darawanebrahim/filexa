@@ -67,6 +67,112 @@ class PdfToolsService {
     return PdfToolResult(path: output, pageCount: info.pageCount);
   }
 
+  Future<PdfToolResult> addBlankPage(String sourcePath) async {
+    final document = PdfDocument(inputBytes: await File(sourcePath).readAsBytes());
+    try {
+      document.pages.add();
+      final output = await _uniqueOutputPath(
+        sourcePath,
+        '${p.basenameWithoutExtension(sourcePath)}_blank_page.pdf',
+      );
+      await File(output).writeAsBytes(await document.save(), flush: true);
+      return PdfToolResult(path: output, pageCount: document.pages.count);
+    } finally {
+      document.dispose();
+    }
+  }
+
+  Future<PdfToolResult> duplicatePages(
+    String sourcePath, {
+    required List<int> pageIndexes,
+  }) async {
+    final source = PdfDocument(inputBytes: await File(sourcePath).readAsBytes());
+    final destination = PdfDocument();
+    try {
+      for (var index = 0; index < source.pages.count; index++) {
+        _copyPage(source.pages[index], destination);
+      }
+      final valid = pageIndexes.where((i) => i >= 0 && i < source.pages.count).toList();
+      if (valid.isEmpty) throw const FormatException('Choose at least one valid page.');
+      for (final index in valid) {
+        _copyPage(source.pages[index], destination);
+      }
+      final output = await _uniqueOutputPath(
+        sourcePath,
+        '${p.basenameWithoutExtension(sourcePath)}_duplicated.pdf',
+      );
+      await File(output).writeAsBytes(await destination.save(), flush: true);
+      return PdfToolResult(path: output, pageCount: destination.pages.count);
+    } finally {
+      destination.dispose();
+      source.dispose();
+    }
+  }
+
+  Future<PdfToolResult> reorderPages(
+    String sourcePath, {
+    required List<int> pageIndexes,
+  }) async {
+    final source = PdfDocument(inputBytes: await File(sourcePath).readAsBytes());
+    final destination = PdfDocument();
+    try {
+      if (pageIndexes.length != source.pages.count) {
+        throw const FormatException('The page order must include every page exactly once.');
+      }
+      final seen = <int>{};
+      for (final index in pageIndexes) {
+        if (index < 0 || index >= source.pages.count || !seen.add(index)) {
+          throw const FormatException('The page order contains an invalid or repeated page.');
+        }
+        _copyPage(source.pages[index], destination);
+      }
+      final output = await _uniqueOutputPath(
+        sourcePath,
+        '${p.basenameWithoutExtension(sourcePath)}_reordered.pdf',
+      );
+      await File(output).writeAsBytes(await destination.save(), flush: true);
+      return PdfToolResult(path: output, pageCount: destination.pages.count);
+    } finally {
+      destination.dispose();
+      source.dispose();
+    }
+  }
+
+  Future<PdfToolResult> addTextWatermark(
+    String sourcePath, {
+    required String text,
+  }) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) throw const FormatException('Enter watermark text.');
+    final document = PdfDocument(inputBytes: await File(sourcePath).readAsBytes());
+    try {
+      final font = PdfStandardFont(PdfFontFamily.helvetica, 30);
+      final brush = PdfSolidBrush(PdfColor(140, 140, 140));
+      final format = PdfStringFormat(
+        alignment: PdfTextAlignment.center,
+        lineAlignment: PdfVerticalAlignment.middle,
+      );
+      for (var index = 0; index < document.pages.count; index++) {
+        final page = document.pages[index];
+        page.graphics.drawString(
+          cleanText,
+          font,
+          brush: brush,
+          bounds: Rect.fromLTWH(0, 0, page.size.width, page.size.height),
+          format: format,
+        );
+      }
+      final output = await _uniqueOutputPath(
+        sourcePath,
+        '${p.basenameWithoutExtension(sourcePath)}_watermarked.pdf',
+      );
+      await File(output).writeAsBytes(await document.save(), flush: true);
+      return PdfToolResult(path: output, pageCount: document.pages.count);
+    } finally {
+      document.dispose();
+    }
+  }
+
   Future<PdfToolResult> rotatePages(
     String sourcePath, {
     required Set<int> pageIndexes,
@@ -205,6 +311,22 @@ class PdfToolsService {
     }
     final ordered = result.toList()..sort();
     return ordered;
+  }
+
+  List<int> parsePageOrder(String input, int pageCount) {
+    final values = input
+        .split(',')
+        .map((value) => int.tryParse(value.trim()))
+        .toList(growable: false);
+    if (values.length != pageCount || values.any((value) => value == null)) {
+      throw FormatException('Enter all $pageCount page numbers, separated by commas.');
+    }
+    final zeroBased = values.map((value) => value! - 1).toList(growable: false);
+    final unique = zeroBased.toSet();
+    if (unique.length != pageCount || zeroBased.any((value) => value < 0 || value >= pageCount)) {
+      throw const FormatException('Each page must appear exactly once.');
+    }
+    return zeroBased;
   }
 
   void _copyPage(PdfPage sourcePage, PdfDocument destination) {

@@ -1105,7 +1105,7 @@ class _BrowserPageState extends State<BrowserPage> with WidgetsBindingObserver {
                           if (value == 'download') await _askDownload(_tab.url);
                           if (value == 'copy') {
                             await Clipboard.setData(ClipboardData(text: _tab.url));
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context)
                               ..hideCurrentSnackBar()
                               ..showSnackBar(const SnackBar(content: Text('Link copied')));
