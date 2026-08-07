@@ -1,0 +1,10 @@
+{
+  "name": "Filexa Flutter",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+
+  "features": {
+    "ghcr.io/cirruslabs/flutter:latest": {}
+  },
+
+  "postCreateCommand": "flutter doctor"
+}
