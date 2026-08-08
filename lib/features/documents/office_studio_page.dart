@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -196,30 +197,74 @@ class WordStudioPage extends StatefulWidget {
   State<WordStudioPage> createState() => _WordStudioPageState();
 }
 
+enum _WordTab { home, insert, review, export }
+
 class _WordStudioPageState extends State<WordStudioPage> {
   final _service = const OfficeDocumentService();
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  final List<TextEditingValue> _undoStack = <TextEditingValue>[];
+  final List<TextEditingValue> _redoStack = <TextEditingValue>[];
+
   bool _loading = true;
   bool _dirty = false;
+  bool _saving = false;
+  bool _focusMode = false;
+  bool _bold = false;
+  bool _italic = false;
+  bool _underline = false;
   double _fontSize = 16;
+  double _lineHeight = 1.55;
+  TextAlign _textAlign = TextAlign.start;
+  String _fontFamily = 'System';
   String? _error;
+  _WordTab _tab = _WordTab.home;
+  Timer? _autoSaveTimer;
+  Timer? _historyTimer;
+  TextEditingValue _lastHistoryValue = const TextEditingValue();
 
   @override
   void initState() {
     super.initState();
     _load();
-    _controller.addListener(_markDirty);
+    _controller.addListener(_onDocumentChanged);
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_markDirty);
+    _autoSaveTimer?.cancel();
+    _historyTimer?.cancel();
+    _controller.removeListener(_onDocumentChanged);
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  void _markDirty() {
-    if (!_loading && !_dirty) setState(() => _dirty = true);
+  void _onDocumentChanged() {
+    if (_loading) return;
+    if (!_dirty) setState(() => _dirty = true);
+    _scheduleAutoSave();
+    _scheduleHistorySnapshot();
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _dirty && !_saving) _save(silent: true);
+    });
+  }
+
+  void _scheduleHistorySnapshot() {
+    _historyTimer?.cancel();
+    _historyTimer = Timer(const Duration(milliseconds: 650), () {
+      final value = _controller.value;
+      if (value.text == _lastHistoryValue.text) return;
+      _undoStack.add(_lastHistoryValue);
+      if (_undoStack.length > 80) _undoStack.removeAt(0);
+      _redoStack.clear();
+      _lastHistoryValue = value;
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _load() async {
@@ -227,6 +272,7 @@ class _WordStudioPageState extends State<WordStudioPage> {
       final text = await _service.readDocxText(widget.path);
       if (!mounted) return;
       _controller.text = text;
+      _lastHistoryValue = _controller.value;
       setState(() {
         _loading = false;
         _dirty = false;
@@ -240,33 +286,160 @@ class _WordStudioPageState extends State<WordStudioPage> {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool silent = false}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
     try {
       await _service.writeDocx(widget.path, _controller.text);
       if (!mounted) return;
-      setState(() => _dirty = false);
-      _snack('Saved ${p.basename(widget.path)}');
+      setState(() {
+        _dirty = false;
+        _saving = false;
+      });
+      if (!silent) _snack('Saved ${p.basename(widget.path)}');
     } catch (error) {
-      if (mounted) _snack('Could not save: $error');
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (!silent) _snack('Could not save: $error');
     }
   }
 
   Future<void> _saveCopy() async {
-    final target = _uniquePath(p.dirname(widget.path), '${p.basenameWithoutExtension(widget.path)} copy', '.docx');
+    final target = _uniquePath(
+      p.dirname(widget.path),
+      '${p.basenameWithoutExtension(widget.path)} copy',
+      '.docx',
+    );
     await _service.writeDocx(target, _controller.text);
     if (mounted) _snack('Saved copy: ${p.basename(target)}');
   }
 
   Future<void> _exportPdf() async {
-    final target = _uniquePath(p.dirname(widget.path), p.basenameWithoutExtension(widget.path), '.pdf');
-    await _service.exportTextPdf(target, _controller.text, title: p.basenameWithoutExtension(widget.path));
+    final target = _uniquePath(
+      p.dirname(widget.path),
+      p.basenameWithoutExtension(widget.path),
+      '.pdf',
+    );
+    await _service.exportTextPdf(
+      target,
+      _controller.text,
+      title: p.basenameWithoutExtension(widget.path),
+    );
     if (mounted) _snack('PDF created: ${p.basename(target)}');
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    _historyTimer?.cancel();
+    final current = _controller.value;
+    final previous = _undoStack.removeLast();
+    _redoStack.add(current);
+    _controller.value = previous;
+    _lastHistoryValue = previous;
+    setState(() => _dirty = true);
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    _historyTimer?.cancel();
+    final current = _controller.value;
+    final next = _redoStack.removeLast();
+    _undoStack.add(current);
+    _controller.value = next;
+    _lastHistoryValue = next;
+    setState(() => _dirty = true);
+  }
+
+  void _insertText(String text) {
+    final selection = _controller.selection;
+    final start = selection.isValid ? selection.start : _controller.text.length;
+    final end = selection.isValid ? selection.end : _controller.text.length;
+    final updated = _controller.text.replaceRange(start, end, text);
+    _controller.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+    _focusNode.requestFocus();
+  }
+
+  Future<void> _showSearchReplace() async {
+    final result = await showModalBottomSheet<_SearchReplaceResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _WordSearchReplaceSheet(text: _controller.text),
+    );
+    if (!mounted || result == null) return;
+
+    if (result.replaceAll && result.query.isNotEmpty) {
+      final replaced = _controller.text.replaceAll(result.query, result.replacement);
+      _controller.value = TextEditingValue(
+        text: replaced,
+        selection: TextSelection.collapsed(offset: replaced.length),
+      );
+      _snack('Replaced all matches');
+      return;
+    }
+
+    if (result.query.isEmpty) return;
+    final startFrom = _controller.selection.isValid ? _controller.selection.end : 0;
+    var index = _controller.text.indexOf(result.query, startFrom);
+    if (index < 0) index = _controller.text.indexOf(result.query);
+    if (index >= 0) {
+      _controller.selection = TextSelection(baseOffset: index, extentOffset: index + result.query.length);
+      _focusNode.requestFocus();
+    } else {
+      _snack('No matches found');
+    }
+  }
+
+  Future<void> _showDocumentInfo() async {
+    final text = _controller.text;
+    final words = _wordCount(text);
+    final chars = text.runes.length;
+    final lines = text.isEmpty ? 0 : '\n'.allMatches(text).length + 1;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Document insights',
+        subtitle: 'Live writing statistics',
+        icon: Icons.analytics_outlined,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
+          child: Row(
+            children: [
+              Expanded(child: _StatCard(label: 'Words', value: '$words')),
+              const SizedBox(width: 10),
+              Expanded(child: _StatCard(label: 'Characters', value: '$chars')),
+              const SizedBox(width: 10),
+              Expanded(child: _StatCard(label: 'Lines', value: '$lines')),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _snack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  TextStyle _editorTextStyle(BuildContext context) {
+    String? family;
+    if (_fontFamily == 'Serif') family = 'serif';
+    if (_fontFamily == 'Mono') family = 'monospace';
+    return TextStyle(
+      fontSize: _fontSize,
+      height: _lineHeight,
+      fontFamily: family,
+      fontWeight: _bold ? FontWeight.w700 : FontWeight.w400,
+      fontStyle: _italic ? FontStyle.italic : FontStyle.normal,
+      decoration: _underline ? TextDecoration.underline : TextDecoration.none,
+      color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF111827) : const Color(0xFF111827),
+    );
   }
 
   @override
@@ -279,64 +452,202 @@ class _WordStudioPageState extends State<WordStudioPage> {
         if (leave && mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          actions: [
-            if (_dirty) const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.circle, size: 9, color: Colors.orange)),
-            IconButton(tooltip: 'Save', onPressed: _loading ? null : _save, icon: const Icon(Icons.save_rounded)),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'copy') _saveCopy();
-                if (value == 'pdf') _exportPdf();
-                if (value == 'share') SharePlus.instance.share(ShareParams(files: [XFile(widget.path)]));
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'copy', child: ListTile(leading: Icon(Icons.copy_rounded), title: Text('Save a copy'))),
-                PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf_rounded), title: Text('Export PDF'))),
-                PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.share_rounded), title: Text('Share'))),
-              ],
-            ),
-          ],
-        ),
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF090D17)
+            : const Color(0xFFF3F4F8),
+        appBar: _focusMode
+            ? null
+            : AppBar(
+                titleSpacing: 4,
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.basenameWithoutExtension(widget.title),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                    ),
+                    Text(
+                      _saving ? 'Saving…' : _dirty ? 'Unsaved changes' : 'Saved automatically',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _dirty ? FilexaUi.warning : FilexaUi.success,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  IconButton(tooltip: 'Undo', onPressed: _undoStack.isEmpty ? null : _undo, icon: const Icon(Icons.undo_rounded)),
+                  IconButton(tooltip: 'Redo', onPressed: _redoStack.isEmpty ? null : _redo, icon: const Icon(Icons.redo_rounded)),
+                  IconButton(tooltip: 'Save', onPressed: _loading ? null : () => _save(), icon: const Icon(Icons.save_rounded)),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'focus') setState(() => _focusMode = true);
+                      if (value == 'copy') _saveCopy();
+                      if (value == 'share') SharePlus.instance.share(ShareParams(files: [XFile(widget.path)]));
+                      if (value == 'info') _showDocumentInfo();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'focus', child: ListTile(leading: Icon(Icons.fullscreen_rounded), title: Text('Focus mode'))),
+                      PopupMenuItem(value: 'copy', child: ListTile(leading: Icon(Icons.copy_rounded), title: Text('Save a copy'))),
+                      PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.share_rounded), title: Text('Share document'))),
+                      PopupMenuItem(value: 'info', child: ListTile(leading: Icon(Icons.analytics_outlined), title: Text('Document insights'))),
+                    ],
+                  ),
+                ],
+              ),
         body: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _error != null
-                  ? FilexaEmptyState(icon: Icons.error_outline_rounded, title: 'Word file could not be opened', message: _error!)
+                  ? FilexaEmptyState(
+                      icon: Icons.error_outline_rounded,
+                      title: 'Word file could not be opened',
+                      message: _error!,
+                    )
                   : Column(
                       children: [
-                        _WordRibbon(
-                          fontSize: _fontSize,
-                          onSmaller: () => setState(() => _fontSize = (_fontSize - 1).clamp(11, 28).toDouble()),
-                          onLarger: () => setState(() => _fontSize = (_fontSize + 1).clamp(11, 28).toDouble()),
-                          onSave: _save,
-                          onExport: _exportPdf,
-                        ),
+                        if (!_focusMode) ...[
+                          _WordTabBar(
+                            selected: _tab,
+                            onChanged: (tab) => setState(() => _tab = tab),
+                          ),
+                          _WordCommandBar(
+                            tab: _tab,
+                            fontSize: _fontSize,
+                            fontFamily: _fontFamily,
+                            bold: _bold,
+                            italic: _italic,
+                            underline: _underline,
+                            textAlign: _textAlign,
+                            canUndo: _undoStack.isNotEmpty,
+                            canRedo: _redoStack.isNotEmpty,
+                            onBold: () => setState(() => _bold = !_bold),
+                            onItalic: () => setState(() => _italic = !_italic),
+                            onUnderline: () => setState(() => _underline = !_underline),
+                            onFontSmaller: () => setState(() => _fontSize = (_fontSize - 1).clamp(10, 44).toDouble()),
+                            onFontLarger: () => setState(() => _fontSize = (_fontSize + 1).clamp(10, 44).toDouble()),
+                            onFontFamily: () => _showFontPicker(),
+                            onAlign: (align) => setState(() => _textAlign = align),
+                            onUndo: _undo,
+                            onRedo: _redo,
+                            onSearch: _showSearchReplace,
+                            onInsertDate: () => _insertText(_todayLabel()),
+                            onInsertDivider: () => _insertText('\n────────────────────────\n'),
+                            onSave: () => _save(),
+                            onSaveCopy: _saveCopy,
+                            onExportPdf: _exportPdf,
+                            onShare: () => SharePlus.instance.share(ShareParams(files: [XFile(widget.path)])),
+                          ),
+                        ],
                         Expanded(
-                          child: Container(
-                            margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                            decoration: FilexaUi.cardDecoration(context, radius: 18, elevated: false),
-                            child: TextField(
-                              controller: _controller,
-                              expands: true,
-                              maxLines: null,
-                              minLines: null,
-                              keyboardType: TextInputType.multiline,
-                              textAlignVertical: TextAlignVertical.top,
-                              style: TextStyle(fontSize: _fontSize, height: 1.55),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.all(20),
-                                hintText: 'Start writing…',
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: SingleChildScrollView(
+                                  padding: EdgeInsets.fromLTRB(
+                                    _focusMode ? 12 : 16,
+                                    _focusMode ? 10 : 18,
+                                    _focusMode ? 12 : 16,
+                                    96,
+                                  ),
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 820),
+                                      child: Container(
+                                        constraints: const BoxConstraints(minHeight: 920),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFFEFC),
+                                          borderRadius: BorderRadius.circular(_focusMode ? 8 : 14),
+                                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: .10),
+                                              blurRadius: 28,
+                                              offset: const Offset(0, 14),
+                                            ),
+                                          ],
+                                        ),
+                                        child: TextField(
+                                          controller: _controller,
+                                          focusNode: _focusNode,
+                                          maxLines: null,
+                                          minLines: 32,
+                                          keyboardType: TextInputType.multiline,
+                                          textAlign: _textAlign,
+                                          textAlignVertical: TextAlignVertical.top,
+                                          style: _editorTextStyle(context),
+                                          cursorColor: FilexaUi.primary,
+                                          decoration: const InputDecoration(
+                                            border: InputBorder.none,
+                                            contentPadding: EdgeInsets.fromLTRB(54, 56, 54, 72),
+                                            hintText: 'Start writing your document…',
+                                            hintStyle: TextStyle(color: Color(0xFF9CA3AF)),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (_focusMode)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: Material(
+                                    color: Colors.black.withValues(alpha: .55),
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: IconButton(
+                                      tooltip: 'Exit focus mode',
+                                      color: Colors.white,
+                                      onPressed: () => setState(() => _focusMode = false),
+                                      icon: const Icon(Icons.fullscreen_exit_rounded),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
+                        if (!_focusMode)
+                          _WordStatusBar(
+                            text: _controller.text,
+                            fontSize: _fontSize,
+                            lineHeight: _lineHeight,
+                            onLineHeight: () => setState(() {
+                              _lineHeight = _lineHeight >= 1.9 ? 1.25 : _lineHeight + .15;
+                            }),
+                          ),
                       ],
                     ),
         ),
       ),
     );
+  }
+
+  Future<void> _showFontPicker() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FilexaPremiumSheet(
+        title: 'Font family',
+        subtitle: 'Choose your writing style',
+        icon: Icons.font_download_outlined,
+        child: Column(
+          children: [
+            for (final family in const ['System', 'Serif', 'Mono'])
+              ListTile(
+                leading: Icon(_fontFamily == family ? Icons.check_circle_rounded : Icons.circle_outlined),
+                title: Text(family, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text(family == 'System' ? 'Modern and clean' : family == 'Serif' ? 'Classic document style' : 'Code and fixed-width text'),
+                onTap: () => Navigator.pop(sheetContext, family),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice != null && mounted) setState(() => _fontFamily = choice);
   }
 
   Future<bool> _confirmDiscard() async {
@@ -351,7 +662,12 @@ class _WordStudioPageState extends State<WordStudioPage> {
               padding: const EdgeInsets.fromLTRB(0, 12, 0, 10),
               child: Row(
                 children: [
-                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheetContext, true), child: const Text('Discard'))),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(sheetContext, true),
+                      child: const Text('Discard'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton(
@@ -370,6 +686,398 @@ class _WordStudioPageState extends State<WordStudioPage> {
         false;
   }
 }
+
+class _WordTabBar extends StatelessWidget {
+  const _WordTabBar({required this.selected, required this.onChanged});
+  final _WordTab selected;
+  final ValueChanged<_WordTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: FilexaUi.surface(context),
+      child: SizedBox(
+        height: 46,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          scrollDirection: Axis.horizontal,
+          children: [
+            _tab(context, _WordTab.home, 'Home', Icons.home_outlined),
+            _tab(context, _WordTab.insert, 'Insert', Icons.add_circle_outline_rounded),
+            _tab(context, _WordTab.review, 'Review', Icons.fact_check_outlined),
+            _tab(context, _WordTab.export, 'Export', Icons.ios_share_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tab(BuildContext context, _WordTab tab, String label, IconData icon) {
+    final active = selected == tab;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onChanged(tab),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 170),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(
+            gradient: active ? FilexaUi.accentGradient : null,
+            color: active ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: active ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: active ? Colors.white : null)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WordCommandBar extends StatelessWidget {
+  const _WordCommandBar({
+    required this.tab,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.bold,
+    required this.italic,
+    required this.underline,
+    required this.textAlign,
+    required this.canUndo,
+    required this.canRedo,
+    required this.onBold,
+    required this.onItalic,
+    required this.onUnderline,
+    required this.onFontSmaller,
+    required this.onFontLarger,
+    required this.onFontFamily,
+    required this.onAlign,
+    required this.onUndo,
+    required this.onRedo,
+    required this.onSearch,
+    required this.onInsertDate,
+    required this.onInsertDivider,
+    required this.onSave,
+    required this.onSaveCopy,
+    required this.onExportPdf,
+    required this.onShare,
+  });
+
+  final _WordTab tab;
+  final double fontSize;
+  final String fontFamily;
+  final bool bold;
+  final bool italic;
+  final bool underline;
+  final TextAlign textAlign;
+  final bool canUndo;
+  final bool canRedo;
+  final VoidCallback onBold;
+  final VoidCallback onItalic;
+  final VoidCallback onUnderline;
+  final VoidCallback onFontSmaller;
+  final VoidCallback onFontLarger;
+  final VoidCallback onFontFamily;
+  final ValueChanged<TextAlign> onAlign;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
+  final VoidCallback onSearch;
+  final VoidCallback onInsertDate;
+  final VoidCallback onInsertDivider;
+  final VoidCallback onSave;
+  final VoidCallback onSaveCopy;
+  final VoidCallback onExportPdf;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = switch (tab) {
+      _WordTab.home => <Widget>[
+          _WordTool(icon: Icons.undo_rounded, label: 'Undo', enabled: canUndo, onTap: onUndo),
+          _WordTool(icon: Icons.redo_rounded, label: 'Redo', enabled: canRedo, onTap: onRedo),
+          _WordTool(icon: Icons.format_bold_rounded, label: 'Bold', selected: bold, onTap: onBold),
+          _WordTool(icon: Icons.format_italic_rounded, label: 'Italic', selected: italic, onTap: onItalic),
+          _WordTool(icon: Icons.format_underlined_rounded, label: 'Underline', selected: underline, onTap: onUnderline),
+          _WordTool(icon: Icons.font_download_outlined, label: fontFamily, onTap: onFontFamily),
+          _WordTool(icon: Icons.text_decrease_rounded, label: 'A−', onTap: onFontSmaller),
+          _WordTool(icon: Icons.text_increase_rounded, label: '${fontSize.round()}', onTap: onFontLarger),
+          _WordTool(icon: Icons.format_align_left_rounded, label: 'Left', selected: textAlign == TextAlign.left || textAlign == TextAlign.start, onTap: () => onAlign(TextAlign.left)),
+          _WordTool(icon: Icons.format_align_center_rounded, label: 'Center', selected: textAlign == TextAlign.center, onTap: () => onAlign(TextAlign.center)),
+          _WordTool(icon: Icons.format_align_right_rounded, label: 'Right', selected: textAlign == TextAlign.right || textAlign == TextAlign.end, onTap: () => onAlign(TextAlign.right)),
+        ],
+      _WordTab.insert => <Widget>[
+          _WordTool(icon: Icons.calendar_today_outlined, label: 'Date', onTap: onInsertDate),
+          _WordTool(icon: Icons.horizontal_rule_rounded, label: 'Divider', onTap: onInsertDivider),
+          _WordTool(icon: Icons.check_box_outlined, label: 'Checklist', enabled: false, onTap: () {}),
+          _WordTool(icon: Icons.image_outlined, label: 'Image', enabled: false, onTap: () {}),
+          _WordTool(icon: Icons.table_chart_outlined, label: 'Table', enabled: false, onTap: () {}),
+        ],
+      _WordTab.review => <Widget>[
+          _WordTool(icon: Icons.manage_search_rounded, label: 'Find / Replace', onTap: onSearch),
+          _WordTool(icon: Icons.spellcheck_rounded, label: 'Spelling', enabled: false, onTap: () {}),
+          _WordTool(icon: Icons.translate_rounded, label: 'Translate', enabled: false, onTap: () {}),
+        ],
+      _WordTab.export => <Widget>[
+          _WordTool(icon: Icons.save_rounded, label: 'Save', onTap: onSave),
+          _WordTool(icon: Icons.copy_rounded, label: 'Save copy', onTap: onSaveCopy),
+          _WordTool(icon: Icons.picture_as_pdf_rounded, label: 'PDF', onTap: onExportPdf),
+          _WordTool(icon: Icons.share_rounded, label: 'Share', onTap: onShare),
+        ],
+    };
+
+    return Container(
+      height: 76,
+      decoration: BoxDecoration(
+        color: FilexaUi.surface(context),
+        border: Border(bottom: BorderSide(color: FilexaUi.border(context))),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        scrollDirection: Axis.horizontal,
+        children: actions,
+      ),
+    );
+  }
+}
+
+class _WordTool extends StatelessWidget {
+  const _WordTool({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+    this.enabled = true,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.only(right: 7),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? FilexaUi.primary.withValues(alpha: .14) : FilexaUi.softSurface(context),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? FilexaUi.primary.withValues(alpha: .55) : FilexaUi.border(context),
+            ),
+          ),
+          child: Opacity(
+            opacity: enabled ? 1 : .38,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: selected ? FilexaUi.primary : onSurface),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: selected ? FilexaUi.primary : null),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WordStatusBar extends StatelessWidget {
+  const _WordStatusBar({required this.text, required this.fontSize, required this.lineHeight, required this.onLineHeight});
+  final String text;
+  final double fontSize;
+  final double lineHeight;
+  final VoidCallback onLineHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final words = _wordCount(text);
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: FilexaUi.surface(context),
+        border: Border(top: BorderSide(color: FilexaUi.border(context))),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: FilexaUi.success, size: 16),
+          const SizedBox(width: 6),
+          Text('$words words', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 14),
+          Text('${text.runes.length} chars', style: Theme.of(context).textTheme.bodySmall),
+          const Spacer(),
+          InkWell(
+            onTap: onLineHeight,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              child: Text('Line ${lineHeight.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('${fontSize.round()} pt', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchReplaceResult {
+  const _SearchReplaceResult({required this.query, required this.replacement, required this.replaceAll});
+  final String query;
+  final String replacement;
+  final bool replaceAll;
+}
+
+class _WordSearchReplaceSheet extends StatefulWidget {
+  const _WordSearchReplaceSheet({required this.text});
+  final String text;
+
+  @override
+  State<_WordSearchReplaceSheet> createState() => _WordSearchReplaceSheetState();
+}
+
+class _WordSearchReplaceSheetState extends State<_WordSearchReplaceSheet> {
+  final _query = TextEditingController();
+  final _replacement = TextEditingController();
+
+  @override
+  void dispose() {
+    _query.dispose();
+    _replacement.dispose();
+    super.dispose();
+  }
+
+  int get _matches {
+    final q = _query.text;
+    if (q.isEmpty) return 0;
+    var count = 0;
+    var offset = 0;
+    while (true) {
+      final index = widget.text.indexOf(q, offset);
+      if (index < 0) break;
+      count++;
+      offset = index + q.length;
+    }
+    return count;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilexaPremiumSheet(
+      title: 'Find & replace',
+      subtitle: _query.text.isEmpty ? 'Search inside this document' : '$_matches matches found',
+      icon: Icons.manage_search_rounded,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 14, 0, 10),
+        child: Column(
+          children: [
+            TextField(
+              controller: _query,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), labelText: 'Find'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _replacement,
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.find_replace_rounded), labelText: 'Replace with'),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _query.text.isEmpty
+                        ? null
+                        : () => Navigator.pop(
+                              context,
+                              _SearchReplaceResult(query: _query.text, replacement: _replacement.text, replaceAll: false),
+                            ),
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Find next'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _query.text.isEmpty
+                        ? null
+                        : () => Navigator.pop(
+                              context,
+                              _SearchReplaceResult(query: _query.text, replacement: _replacement.text, replaceAll: true),
+                            ),
+                    icon: const Icon(Icons.find_replace_rounded),
+                    label: const Text('Replace all'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: FilexaUi.softSurface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: FilexaUi.border(context)),
+      ),
+      child: Column(
+        children: [
+          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 3),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+int _wordCount(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return 0;
+  return RegExp(r'\S+').allMatches(trimmed).length;
+}
+
+String _todayLabel() {
+  final now = DateTime.now();
+  final month = now.month.toString().padLeft(2, '0');
+  final day = now.day.toString().padLeft(2, '0');
+  return '${now.year}-$month-$day';
+}
+
 
 class ExcelStudioPage extends StatefulWidget {
   const ExcelStudioPage({super.key, required this.path, required this.title});
@@ -625,33 +1333,6 @@ class _OfficeCreateCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _WordRibbon extends StatelessWidget {
-  const _WordRibbon({required this.fontSize, required this.onSmaller, required this.onLarger, required this.onSave, required this.onExport});
-  final double fontSize;
-  final VoidCallback onSmaller;
-  final VoidCallback onLarger;
-  final VoidCallback onSave;
-  final VoidCallback onExport;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 66,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        scrollDirection: Axis.horizontal,
-        children: [
-          _RibbonButton(icon: Icons.save_rounded, label: 'Save', onTap: onSave),
-          _RibbonButton(icon: Icons.picture_as_pdf_rounded, label: 'PDF', onTap: onExport),
-          _RibbonButton(icon: Icons.text_decrease_rounded, label: 'A−', onTap: onSmaller),
-          _RibbonButton(icon: Icons.text_increase_rounded, label: 'A+', onTap: onLarger),
-          _RibbonChip(label: '${fontSize.round()} pt'),
-        ],
       ),
     );
   }
