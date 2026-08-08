@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/file_item.dart';
 import '../../core/providers/file_provider.dart';
+import '../../core/services/file_service.dart';
 import '../../core/services/office_document_service.dart';
 import '../../theme/filexa_ui.dart';
 
@@ -164,6 +164,8 @@ class OfficeStudioPage extends ConsumerWidget {
         builder: (_) => WordStudioPage(path: path, title: p.basename(path)),
       ),
     );
+    if (!context.mounted) return;
+    ref.invalidate(filesProvider);
   }
 
   Future<void> _createExcel(BuildContext context, WidgetRef ref) async {
@@ -177,6 +179,8 @@ class OfficeStudioPage extends ConsumerWidget {
         builder: (_) => ExcelStudioPage(path: path, title: p.basename(path)),
       ),
     );
+    if (!context.mounted) return;
+    ref.invalidate(filesProvider);
   }
 }
 
@@ -492,6 +496,96 @@ class _WordStudioPageState extends State<WordStudioPage> {
     _insertText('$selected$selected');
   }
 
+
+  Future<void> _showTemplateCenter() async {
+    final template = await showModalBottomSheet<_WordTemplate>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => const _WordTemplateSheet(),
+    );
+    if (!mounted || template == null) return;
+    if (_controller.text.trim().isNotEmpty) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Apply template?'),
+          content: const Text('This replaces the current document text. Save a copy first if you want to keep it.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Apply')),
+          ],
+        ),
+      );
+      if (replace != true) return;
+    }
+    _controller.value = TextEditingValue(
+      text: template.body,
+      selection: TextSelection.collapsed(offset: template.body.length),
+    );
+    _snack('${template.title} template applied');
+    _focusNode.requestFocus();
+  }
+
+  void _insertHeading(String label) =>
+      _insertText('\n$label\n${'═' * label.length}\n');
+
+  void _insertQuoteBlock() =>
+      _insertText('\n❝ Quote or important note\n');
+
+  void _insertSignatureBlock() => _insertText(
+        '\n\n____________________________\n'
+        'Name: ______________________\n'
+        'Date: ${_todayLabel()}\n'
+        'Signature\n',
+      );
+
+  void _insertPageBreak() =>
+      _insertText('\n\n────────── PAGE BREAK ──────────\n\n');
+
+  void _insertTableScaffold() => _insertText(
+        '\n| Column 1 | Column 2 | Column 3 |\n'
+        '|----------|----------|----------|\n'
+        '|          |          |          |\n'
+        '|          |          |          |\n',
+      );
+
+  void _cleanDocument() {
+    var text = _controller.text;
+    text = text
+        .split('\n')
+        .map((line) => line.replaceAll(RegExp(r'[ \t]+$'), ''))
+        .join('\n');
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _snack('Extra spaces and blank lines cleaned');
+  }
+
+  void _sortSelectedLines() {
+    final selection = _controller.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      _snack('Select two or more lines first');
+      return;
+    }
+    final selected = selection.textInside(_controller.text);
+    final lines = selected.split('\n')
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final changed = lines.join('\n');
+    _controller.value = TextEditingValue(
+      text: selection.textBefore(_controller.text) +
+          changed +
+          selection.textAfter(_controller.text),
+      selection: TextSelection(
+        baseOffset: selection.start,
+        extentOffset: selection.start + changed.length,
+      ),
+    );
+    _focusNode.requestFocus();
+  }
+
   Future<void> _showSearchReplace() async {
     final result = await showModalBottomSheet<_SearchReplaceResult>(
       context: context,
@@ -584,7 +678,7 @@ class _WordStudioPageState extends State<WordStudioPage> {
       fontStyle: _italic ? FontStyle.italic : FontStyle.normal,
       decoration: _underline ? TextDecoration.underline : TextDecoration.none,
       color: Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFF111827)
+          ? const Color(0xFFF8FAFC)
           : const Color(0xFF111827),
     );
   }
@@ -745,6 +839,14 @@ class _WordStudioPageState extends State<WordStudioPage> {
                         onUppercase: () => _changeSelectionCase(true),
                         onLowercase: () => _changeSelectionCase(false),
                         onDuplicate: _duplicateSelection,
+                        onTemplates: _showTemplateCenter,
+                        onHeading: () => _insertHeading('Heading'),
+                        onQuote: _insertQuoteBlock,
+                        onSignature: _insertSignatureBlock,
+                        onPageBreak: _insertPageBreak,
+                        onTable: _insertTableScaffold,
+                        onClean: _cleanDocument,
+                        onSortLines: _sortSelectedLines,
                         onSave: () => _save(),
                         onSaveCopy: _saveCopy,
                         onExportPdf: _exportPdf,
@@ -774,12 +876,16 @@ class _WordStudioPageState extends State<WordStudioPage> {
                                       minHeight: 920,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFFFEFC),
+                                      color: Theme.of(context).brightness == Brightness.dark
+                                          ? const Color(0xFF171C2E)
+                                          : const Color(0xFFFFFEFC),
                                       borderRadius: BorderRadius.circular(
                                         _focusMode ? 8 : 14,
                                       ),
                                       border: Border.all(
-                                        color: const Color(0xFFE5E7EB),
+                                        color: Theme.of(context).brightness == Brightness.dark
+                                            ? const Color(0xFF3A435C)
+                                            : const Color(0xFFE5E7EB),
                                       ),
                                       boxShadow: [
                                         BoxShadow(
@@ -801,6 +907,7 @@ class _WordStudioPageState extends State<WordStudioPage> {
                                       textAlignVertical: TextAlignVertical.top,
                                       style: _editorTextStyle(context),
                                       cursorColor: FilexaUi.primary,
+                                      keyboardAppearance: Theme.of(context).brightness,
                                       decoration: const InputDecoration(
                                         border: InputBorder.none,
                                         contentPadding: EdgeInsets.fromLTRB(
@@ -1034,6 +1141,14 @@ class _WordCommandBar extends StatelessWidget {
     required this.onUppercase,
     required this.onLowercase,
     required this.onDuplicate,
+    required this.onTemplates,
+    required this.onHeading,
+    required this.onQuote,
+    required this.onSignature,
+    required this.onPageBreak,
+    required this.onTable,
+    required this.onClean,
+    required this.onSortLines,
     required this.onSave,
     required this.onSaveCopy,
     required this.onExportPdf,
@@ -1067,6 +1182,14 @@ class _WordCommandBar extends StatelessWidget {
   final VoidCallback onUppercase;
   final VoidCallback onLowercase;
   final VoidCallback onDuplicate;
+  final VoidCallback onTemplates;
+  final VoidCallback onHeading;
+  final VoidCallback onQuote;
+  final VoidCallback onSignature;
+  final VoidCallback onPageBreak;
+  final VoidCallback onTable;
+  final VoidCallback onClean;
+  final VoidCallback onSortLines;
   final VoidCallback onSave;
   final VoidCallback onSaveCopy;
   final VoidCallback onExportPdf;
@@ -1171,18 +1294,12 @@ class _WordCommandBar extends StatelessWidget {
           label: 'Duplicate',
           onTap: onDuplicate,
         ),
-        _WordTool(
-          icon: Icons.image_outlined,
-          label: 'Image',
-          enabled: false,
-          onTap: () {},
-        ),
-        _WordTool(
-          icon: Icons.table_chart_outlined,
-          label: 'Table',
-          enabled: false,
-          onTap: () {},
-        ),
+        _WordTool(icon: Icons.dashboard_customize_outlined, label: 'Templates', onTap: onTemplates),
+        _WordTool(icon: Icons.title_rounded, label: 'Heading', onTap: onHeading),
+        _WordTool(icon: Icons.format_quote_rounded, label: 'Quote', onTap: onQuote),
+        _WordTool(icon: Icons.table_chart_outlined, label: 'Table', onTap: onTable),
+        _WordTool(icon: Icons.insert_page_break_rounded, label: 'Page break', onTap: onPageBreak),
+        _WordTool(icon: Icons.draw_outlined, label: 'Signature', onTap: onSignature),
       ],
       _WordTab.review => <Widget>[
         _WordTool(
@@ -1200,18 +1317,8 @@ class _WordCommandBar extends StatelessWidget {
           label: 'lower',
           onTap: onLowercase,
         ),
-        _WordTool(
-          icon: Icons.spellcheck_rounded,
-          label: 'Spelling',
-          enabled: false,
-          onTap: () {},
-        ),
-        _WordTool(
-          icon: Icons.translate_rounded,
-          label: 'Translate',
-          enabled: false,
-          onTap: () {},
-        ),
+        _WordTool(icon: Icons.auto_fix_high_rounded, label: 'Clean', onTap: onClean),
+        _WordTool(icon: Icons.sort_by_alpha_rounded, label: 'Sort lines', onTap: onSortLines),
       ],
       _WordTab.export => <Widget>[
         _WordTool(icon: Icons.save_rounded, label: 'Save', onTap: onSave),
@@ -1489,6 +1596,63 @@ class _WordSearchReplaceSheetState extends State<_WordSearchReplaceSheet> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _WordTemplate {
+  const _WordTemplate(this.title, this.subtitle, this.icon, this.body);
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String body;
+}
+
+class _WordTemplateSheet extends StatelessWidget {
+  const _WordTemplateSheet();
+
+  static const templates = <_WordTemplate>[
+    _WordTemplate('Blank note', 'Clean page with a title and date', Icons.note_alt_outlined,
+        'TITLE\n=====\nDate: __________\n\nStart writing here…\n'),
+    _WordTemplate('Official letter', 'Formal letter structure', Icons.mail_outline_rounded,
+        'OFFICIAL LETTER\n===============\nDate: __________\nTo: __________________________\nSubject: _____________________\n\nDear Sir/Madam,\n\n[Write your letter here]\n\nSincerely,\nName: ________________________\nSignature: ___________________\n'),
+    _WordTemplate('Meeting notes', 'Agenda, decisions and actions', Icons.groups_outlined,
+        'MEETING NOTES\n=============\nDate: __________   Time: ______\nParticipants:\n• \n\nAGENDA\n------\n1. \n\nNOTES\n-----\n\nDECISIONS\n---------\n• \n\nACTION ITEMS\n------------\n☐ Task — Owner — Due date\n'),
+    _WordTemplate('Report', 'Professional report outline', Icons.summarize_outlined,
+        'REPORT TITLE\n============\nPrepared by: __________\nDate: __________\n\n1. Executive summary\n--------------------\n\n2. Background\n-------------\n\n3. Findings\n-----------\n\n4. Recommendations\n------------------\n\n5. Conclusion\n-------------\n'),
+    _WordTemplate('Invoice', 'Simple invoice worksheet', Icons.receipt_long_outlined,
+        'INVOICE\n=======\nInvoice #: ________   Date: ________\nFrom: ______________________________\nTo: ________________________________\n\n| Item | Qty | Price | Total |\n|------|-----|-------|-------|\n|      |     |       |       |\n\nSubtotal: __________\nTotal: ______________\n\nThank you.\n'),
+    _WordTemplate('CV / Résumé', 'Fast résumé starter', Icons.badge_outlined,
+        'YOUR NAME\n=========\nPhone • Email • Location\n\nPROFILE\n-------\n\nEXPERIENCE\n----------\nRole — Organization — Dates\n• Achievement\n\nEDUCATION\n---------\n\nSKILLS\n------\n• \n'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return FilexaPremiumSheet(
+      title: 'Template Center',
+      subtitle: 'Start faster with a ready document structure',
+      icon: Icons.dashboard_customize_outlined,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .62),
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: templates.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final template = templates[index];
+            return ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              tileColor: FilexaUi.surface(context),
+              leading: CircleAvatar(child: Icon(template.icon)),
+              title: Text(template.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text(template.subtitle),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+              onTap: () => Navigator.pop(context, template),
+            );
+          },
         ),
       ),
     );
@@ -2055,9 +2219,15 @@ class _SpreadsheetGrid extends StatelessWidget {
 }
 
 Future<Directory> _outputDirectory() async {
-  final downloads = await getDownloadsDirectory();
-  if (downloads != null) return downloads;
-  return getApplicationDocumentsDirectory();
+  // Keep Office documents inside the same Filexa-managed directory that
+  // filesProvider scans. This makes newly created DOCX/XLSX files visible
+  // immediately in Office Studio instead of saving them to a different
+  // Downloads/Documents location.
+  final directory = await FileService().getFilexaDirectory();
+  if (!await directory.exists()) {
+    await directory.create(recursive: true);
+  }
+  return directory;
 }
 
 String _uniquePath(String directory, String base, String extension) {
