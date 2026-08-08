@@ -362,6 +362,71 @@ class _WordStudioPageState extends State<WordStudioPage> {
     _focusNode.requestFocus();
   }
 
+  void _toggleLinePrefix(String prefix) {
+    final selection = _controller.selection;
+    final start = selection.isValid ? selection.start : 0;
+    final end = selection.isValid ? selection.end : _controller.text.length;
+    final before = _controller.text.substring(0, start);
+    final selected = _controller.text.substring(start, end);
+    final after = _controller.text.substring(end);
+    final lines = selected.split('\n');
+    final allPrefixed = lines.where((line) => line.trim().isNotEmpty).every((line) => line.startsWith(prefix));
+    final changed = lines.map((line) {
+      if (line.trim().isEmpty) return line;
+      return allPrefixed && line.startsWith(prefix) ? line.substring(prefix.length) : '$prefix$line';
+    }).join('\n');
+    _controller.value = TextEditingValue(
+      text: '$before$changed$after',
+      selection: TextSelection(baseOffset: start, extentOffset: start + changed.length),
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _numberSelection() {
+    final selection = _controller.selection;
+    final start = selection.isValid ? selection.start : 0;
+    final end = selection.isValid ? selection.end : _controller.text.length;
+    final before = _controller.text.substring(0, start);
+    final selected = _controller.text.substring(start, end);
+    final after = _controller.text.substring(end);
+    var number = 1;
+    final changed = selected.split('\n').map((line) {
+      if (line.trim().isEmpty) return line;
+      return '${number++}. ${line.replaceFirst(RegExp(r'^\d+\.\s+'), '')}';
+    }).join('\n');
+    _controller.value = TextEditingValue(
+      text: '$before$changed$after',
+      selection: TextSelection(baseOffset: start, extentOffset: start + changed.length),
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _changeSelectionCase(bool upper) {
+    final selection = _controller.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      _snack('Select text first');
+      return;
+    }
+    final selected = selection.textInside(_controller.text);
+    final changed = upper ? selected.toUpperCase() : selected.toLowerCase();
+    final updated = selection.textBefore(_controller.text) + changed + selection.textAfter(_controller.text);
+    _controller.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection(baseOffset: selection.start, extentOffset: selection.start + changed.length),
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _duplicateSelection() {
+    final selection = _controller.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      _snack('Select text first');
+      return;
+    }
+    final selected = selection.textInside(_controller.text);
+    _insertText('$selected$selected');
+  }
+
   Future<void> _showSearchReplace() async {
     final result = await showModalBottomSheet<_SearchReplaceResult>(
       context: context,
@@ -536,6 +601,12 @@ class _WordStudioPageState extends State<WordStudioPage> {
                             onSearch: _showSearchReplace,
                             onInsertDate: () => _insertText(_todayLabel()),
                             onInsertDivider: () => _insertText('\n────────────────────────\n'),
+                            onBulletList: () => _toggleLinePrefix('• '),
+                            onNumberList: _numberSelection,
+                            onChecklist: () => _toggleLinePrefix('☐ '),
+                            onUppercase: () => _changeSelectionCase(true),
+                            onLowercase: () => _changeSelectionCase(false),
+                            onDuplicate: _duplicateSelection,
                             onSave: () => _save(),
                             onSaveCopy: _saveCopy,
                             onExportPdf: _exportPdf,
@@ -763,6 +834,12 @@ class _WordCommandBar extends StatelessWidget {
     required this.onSearch,
     required this.onInsertDate,
     required this.onInsertDivider,
+    required this.onBulletList,
+    required this.onNumberList,
+    required this.onChecklist,
+    required this.onUppercase,
+    required this.onLowercase,
+    required this.onDuplicate,
     required this.onSave,
     required this.onSaveCopy,
     required this.onExportPdf,
@@ -790,6 +867,12 @@ class _WordCommandBar extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onInsertDate;
   final VoidCallback onInsertDivider;
+  final VoidCallback onBulletList;
+  final VoidCallback onNumberList;
+  final VoidCallback onChecklist;
+  final VoidCallback onUppercase;
+  final VoidCallback onLowercase;
+  final VoidCallback onDuplicate;
   final VoidCallback onSave;
   final VoidCallback onSaveCopy;
   final VoidCallback onExportPdf;
@@ -804,6 +887,8 @@ class _WordCommandBar extends StatelessWidget {
           _WordTool(icon: Icons.format_bold_rounded, label: 'Bold', selected: bold, onTap: onBold),
           _WordTool(icon: Icons.format_italic_rounded, label: 'Italic', selected: italic, onTap: onItalic),
           _WordTool(icon: Icons.format_underlined_rounded, label: 'Underline', selected: underline, onTap: onUnderline),
+          _WordTool(icon: Icons.format_list_bulleted_rounded, label: 'Bullets', onTap: onBulletList),
+          _WordTool(icon: Icons.format_list_numbered_rounded, label: 'Number', onTap: onNumberList),
           _WordTool(icon: Icons.font_download_outlined, label: fontFamily, onTap: onFontFamily),
           _WordTool(icon: Icons.text_decrease_rounded, label: 'A−', onTap: onFontSmaller),
           _WordTool(icon: Icons.text_increase_rounded, label: '${fontSize.round()}', onTap: onFontLarger),
@@ -814,12 +899,15 @@ class _WordCommandBar extends StatelessWidget {
       _WordTab.insert => <Widget>[
           _WordTool(icon: Icons.calendar_today_outlined, label: 'Date', onTap: onInsertDate),
           _WordTool(icon: Icons.horizontal_rule_rounded, label: 'Divider', onTap: onInsertDivider),
-          _WordTool(icon: Icons.check_box_outlined, label: 'Checklist', enabled: false, onTap: () {}),
+          _WordTool(icon: Icons.check_box_outlined, label: 'Checklist', onTap: onChecklist),
+          _WordTool(icon: Icons.control_point_duplicate_rounded, label: 'Duplicate', onTap: onDuplicate),
           _WordTool(icon: Icons.image_outlined, label: 'Image', enabled: false, onTap: () {}),
           _WordTool(icon: Icons.table_chart_outlined, label: 'Table', enabled: false, onTap: () {}),
         ],
       _WordTab.review => <Widget>[
           _WordTool(icon: Icons.manage_search_rounded, label: 'Find / Replace', onTap: onSearch),
+          _WordTool(icon: Icons.text_fields_rounded, label: 'UPPER', onTap: onUppercase),
+          _WordTool(icon: Icons.text_fields_rounded, label: 'lower', onTap: onLowercase),
           _WordTool(icon: Icons.spellcheck_rounded, label: 'Spelling', enabled: false, onTap: () {}),
           _WordTool(icon: Icons.translate_rounded, label: 'Translate', enabled: false, onTap: () {}),
         ],
